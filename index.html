@@ -166,7 +166,7 @@ const POSITIONS = [
                     { id: "tn_c1", text: "Tổng kết doanh thu cuối ca, đối chiếu tiền mặt và chuyển khoản" },
                     { id: "tn_c2", text: "Kiểm tra xuất VAT đầy đủ" },
                     { id: "tn_c3", text: "Nộp két và báo cáo doanh thu" },
-                ], fields: [{ k: "doanhthu", label: "Doanh thu ca (đồng)", num: true }, { k: "tienmat", label: "Tiền mặt đối chiếu (đồng)", num: true }, { k: "chenhlech", label: "Chênh lệch nếu có", flag: true }] },
+                ], fields: [{ k: "recon", label: "Đối soát tiền cuối ca", recon: true }, { k: "chenhlech", label: "Chênh lệch tiền mặt", flag: true }] },
         },
     },
     {
@@ -532,7 +532,7 @@ function LoginGate({ staff, onPick }) {
         React.createElement("div", { style: { display: "grid", gap: 8 } }, list.map((s) => {
             const p = posById(s.posId);
             const Ic = p ? p.Icon : UserRound;
-            const lv = s.accessLevel || "nhanvien";
+            const lv = levelForPos(s.posId);
             return (React.createElement("button", { key: s.id, onClick: () => onPick(s), style: { width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 12, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 13, padding: "12px 14px", cursor: "pointer" } },
                 React.createElement("span", { style: { width: 40, height: 40, borderRadius: "50%", background: C.tealSoft, display: "grid", placeItems: "center", flexShrink: 0 } },
                     React.createElement(Ic, { size: 19, color: C.teal })),
@@ -553,6 +553,7 @@ function StaffWork({ emp, onLogout }) {
     const [showSelf, setShowSelf] = useState(false);
     const [showTraining, setShowTraining] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
+    const [show86, setShow86] = useState(false);
     const [roster, setRoster] = useState(null);
     useEffect(() => { (async () => { const raw = await safeGet("roster:week", true); if (raw) {
         try {
@@ -577,7 +578,9 @@ function StaffWork({ emp, onLogout }) {
     if (showTraining)
         return React.createElement(TrainingView, { posId: emp.posId, editable: false, onBack: () => setShowTraining(false) });
     if (showMenu)
-        return React.createElement(StaffMenu, { onBack: () => setShowMenu(false) });
+        return React.createElement(StaffMenu, { posId: emp.posId, onBack: () => setShowMenu(false) });
+    if (show86)
+        return React.createElement(EightySixView, { emp: emp, onBack: () => setShow86(false) });
     if (!pos)
         return React.createElement("div", { style: { padding: 24 } },
             React.createElement(PrimaryButton, { onClick: logout }, "\u0110\u0103ng xu\u1EA5t"));
@@ -600,7 +603,10 @@ function StaffWork({ emp, onLogout }) {
                     " Hi\u1EC7u su\u1EA5t c\u1EE7a t\u00F4i"),
                 React.createElement("button", { onClick: () => setShowRoster(true), style: chipBtn },
                     React.createElement(CalendarDays, { size: 14 }),
-                    " L\u1ECBch l\u00E0m vi\u1EC7c")),
+                    " L\u1ECBch l\u00E0m vi\u1EC7c"),
+                React.createElement("button", { onClick: () => setShow86(true), style: chipBtn },
+                    React.createElement(Flame, { size: 14 }),
+                    " H\u1EBFt m\u00F3n h\u00F4m nay")),
             React.createElement("div", { style: { background: C.ink, borderRadius: 14, padding: 14, marginBottom: 16, color: "#fff" } },
                 React.createElement("span", { style: { fontSize: 12, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "#9AB8E8" } }, "C\u00F4ng vi\u1EC7c h\u00F4m nay"),
                 React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 8 } },
@@ -648,7 +654,7 @@ function StaffWork({ emp, onLogout }) {
                 React.createElement(Row, { label: "Ho\u00E0n th\u00E0nh", value: `${doneCount}/${tasks.length} việc · ${pct}%` })),
             fields.map((f) => {
                 const m = meta(f.k);
-                return f.num ? (React.createElement("div", { key: f.k, style: { marginBottom: 14 } },
+                return f.recon ? (React.createElement(ReconField, { key: f.k, eos: eos, setEos: setEos })) : f.num ? (React.createElement("div", { key: f.k, style: { marginBottom: 14 } },
                     React.createElement(FieldLabel, { Icon: m.Icon, color: m.color, label: f.label }),
                     React.createElement("input", { value: eos[f.k] || "", inputMode: "numeric", placeholder: f.ph || "", onChange: (e) => setEos({ ...eos, [f.k]: e.target.value }), style: inputStyle }))) : (React.createElement(ReportField, { key: f.k, Icon: m.Icon, color: m.color, label: f.label, ph: f.ph || "", value: eos[f.k] || "", onChange: (v) => setEos({ ...eos, [f.k]: v }) }));
             }),
@@ -774,6 +780,7 @@ function ManagerFlow({ me, onLogout }) {
     const [schedule, setSchedule] = useState(null);
     const [reward, setReward] = useState(null);
     const [showInbox, setShowInbox] = useState(false);
+    const [show86, setShow86] = useState(false);
     const [scheduleOpen, setScheduleOpen] = useState(false);
     const [showCompliance, setShowCompliance] = useState(false);
     const [showRoster, setShowRoster] = useState(false);
@@ -803,16 +810,18 @@ function ManagerFlow({ me, onLogout }) {
     }
     async function loadDishes() {
         setDishes(null);
+        const ver = await safeGet("menu:ver", true);
         const raw = await safeGet("menu:dishes", true);
-        if (raw) {
+        if (raw && ver === MENU_VER) {
             try {
                 setDishes(JSON.parse(raw));
                 return;
             }
             catch (_a) { }
         }
-        await safeSet("menu:dishes", JSON.stringify(REAL_DISHES), true);
-        setDishes(REAL_DISHES);
+        await safeSet("menu:dishes", JSON.stringify(REAL_MENU), true);
+        await safeSet("menu:ver", MENU_VER, true);
+        setDishes(REAL_MENU);
     }
     async function loadStaff() {
         setStaff(null);
@@ -928,6 +937,8 @@ function ManagerFlow({ me, onLogout }) {
         return React.createElement(StaffForm, { initial: staffView.emp, onCancel: () => setStaffView(staffView.emp ? { mode: "detail", emp: staffView.emp } : null), onSave: saveStaff });
     if (showInbox)
         return React.createElement(IssueInbox, { reports: scopedReports, resolved: resolved, onToggle: toggleIssue, onBack: () => setShowInbox(false), onOpenReport: (r) => setOpenReport(r) });
+    if (show86)
+        return React.createElement(EightySixView, { emp: me, onBack: () => setShow86(false) });
     if (scheduleOpen && caps.schedule)
         return React.createElement(ScheduleEditor, { initial: schedule, onCancel: () => setScheduleOpen(false), onSave: saveSchedule });
     if (showCompliance)
@@ -950,7 +961,7 @@ function ManagerFlow({ me, onLogout }) {
     return (React.createElement("div", { className: "fade", style: { padding: "20px 18px" } },
         React.createElement(TopBar, { title: VENUE, subtitle: `${me.name} · ${caps.title}`, onBack: onLogout }),
         React.createElement("div", { style: { display: "flex", gap: 4, marginBottom: 18, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: 4, overflowX: "auto" } }, tabs.map((t) => React.createElement(TabBtn, { key: t.id, active: tab === t.id, onClick: () => setTab(t.id), Icon: t.Icon, label: t.label }))),
-        tab === "overview" ? (React.createElement(OverviewBody, { reports: rangeReports, staff: scopedStaff, target: target, onSetTarget: saveTarget, onOpenReport: (r) => setOpenReport(r), schedule: schedule, resolved: resolved, onToggleIssue: toggleIssue, onOpenInbox: () => setShowInbox(true), onEditSchedule: caps.schedule ? () => setScheduleOpen(true) : null, onOpenCompliance: () => setShowCompliance(true), onOpenRoster: () => setShowRoster(true), onOpenTraining: () => setTraining({ mode: "hub" }), period: period, setPeriod: setPeriod, range: range })) : tab === "reports" ? (React.createElement(React.Fragment, null,
+        tab === "overview" ? (React.createElement(OverviewBody, { reports: rangeReports, staff: scopedStaff, target: target, onSetTarget: saveTarget, onOpenReport: (r) => setOpenReport(r), schedule: schedule, resolved: resolved, onToggleIssue: toggleIssue, onOpenInbox: () => setShowInbox(true), onEditSchedule: caps.schedule ? () => setScheduleOpen(true) : null, onOpenCompliance: () => setShowCompliance(true), onOpenRoster: () => setShowRoster(true), onOpenTraining: () => setTraining({ mode: "hub" }), onOpen86: () => setShow86(true), period: period, setPeriod: setPeriod, range: range })) : tab === "reports" ? (React.createElement(React.Fragment, null,
             scopedReports && scopedReports.length > 0 && (React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 16 } },
                 React.createElement(Stat, { Icon: ClipboardList, label: "B\u00E1o c\u00E1o", value: scopedReports.length }),
                 React.createElement(Stat, { Icon: CircleCheck, label: "\u0110\u00E3 ch\u1EA5m", value: reviewed }),
@@ -967,7 +978,7 @@ function ManagerFlow({ me, onLogout }) {
             shown && shown.length === 0 && (React.createElement("div", { style: { textAlign: "center", padding: "40px 20px", background: C.surface, borderRadius: 14, border: `1px dashed ${C.line}` } },
                 React.createElement(ImageIcon, { size: 30, color: C.inkSoft, style: { marginBottom: 10 } }),
                 React.createElement("p", { style: { color: C.inkSoft, fontSize: 14, lineHeight: 1.5 } }, "Ch\u01B0a c\u00F3 b\u00E1o c\u00E1o n\u00E0o \u1EDF m\u1EE5c n\u00E0y."))),
-            React.createElement("div", { style: { display: "grid", gap: 10 } }, shown && shown.map((r) => React.createElement(ReportCard, { key: r.id, report: r, onClick: () => setOpenReport(r) }))))) : tab === "menu" ? (React.createElement(MenuBody, { dishes: dishes, showCost: caps.showCost, canAdd: caps.menuEdit, onOpen: (d) => setDishView({ mode: "detail", dish: d }), onAdd: () => setDishView({ mode: "form", dish: null }), onReload: loadDishes })) : tab === "nhansu" ? (React.createElement(StaffManageBody, { staff: scopedStaff, canEdit: caps.staffEdit, onOpen: (e) => setStaffView({ mode: "detail", emp: e }), onAdd: () => setStaffView({ mode: "form", emp: null }), onReload: loadStaff })) : (React.createElement(StaffPerfBody, { staff: scopedStaff, reports: rangeReports, period: period, setPeriod: setPeriod, canEdit: caps.staffEdit, onOpen: (e) => setStaffView({ mode: "detail", emp: e }), onAdd: null, onReload: loadStaff }))));
+            React.createElement("div", { style: { display: "grid", gap: 10 } }, shown && shown.map((r) => React.createElement(ReportCard, { key: r.id, report: r, onClick: () => setOpenReport(r) }))))) : tab === "menu" ? (React.createElement(MenuBody, { dishes: dishes, showCost: caps.showCost, canAdd: caps.menuEdit, kind: caps.menuKind, onOpen: (d) => setDishView({ mode: "detail", dish: d }), onAdd: () => setDishView({ mode: "form", dish: null }), onReload: loadDishes })) : tab === "nhansu" ? (React.createElement(StaffManageBody, { staff: scopedStaff, canEdit: caps.staffEdit, onOpen: (e) => setStaffView({ mode: "detail", emp: e }), onAdd: () => setStaffView({ mode: "form", emp: null }), onReload: loadStaff })) : (React.createElement(StaffPerfBody, { staff: scopedStaff, reports: rangeReports, period: period, setPeriod: setPeriod, canEdit: caps.staffEdit, onOpen: (e) => setStaffView({ mode: "detail", emp: e }), onAdd: null, onReload: loadStaff }))));
 }
 function FilterChip({ active, onClick, label }) {
     return React.createElement("button", { onClick: onClick, style: { whiteSpace: "nowrap", fontSize: 13, fontWeight: 600, padding: "7px 13px", borderRadius: 99, cursor: "pointer", border: `1px solid ${active ? C.teal : C.line}`, background: active ? C.teal : C.surface, color: active ? "#fff" : C.inkSoft } }, label);
@@ -1036,6 +1047,7 @@ function ReportDetail({ report, onBack, onSave }) {
                         b.label),
                     React.createElement("p", { style: { fontSize: 14, color: C.ink, marginTop: 5, lineHeight: 1.45 } }, b.num ? report.eos[b.k] + " đồng" : report.eos[b.k])));
             })))),
+        report.eos && (report.eos.quydau || report.eos.tienmatdem) && React.createElement(ReconSummary, { eos: report.eos }),
         React.createElement(Label, null,
             "H\u00ECnh \u1EA3nh x\u00E1c nh\u1EADn (",
             photos.length,
@@ -1059,6 +1071,78 @@ function StarPicker({ value, onPick }) {
         React.createElement(Star, { size: 20, color: C.gold, fill: n <= value ? C.gold : "transparent" }))))));
 }
 function avgScore(scores) { const vals = RUBRIC.map((r) => scores[r.id] || 0).filter((v) => v > 0); return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0; }
+const RECON_THRESHOLD = 50000;
+function ReconField({ eos, setEos }) {
+    function setVal(k, v) {
+        const next = { ...eos, [k]: v };
+        const q = moneyNum(next.quydau), b = moneyNum(next.tienmatban), c = moneyNum(next.chuyenkhoan), d = moneyNum(next.tienmatdem);
+        const varr = d - (q + b);
+        next.doanhthu = String(b + c);
+        next.chenhlech = Math.abs(varr) > RECON_THRESHOLD ? ("Lệch " + fmt(Math.abs(varr)) + "đ (" + (varr < 0 ? "thiếu" : "dư") + ")") : "Không";
+        setEos(next);
+    }
+    const q = moneyNum(eos.quydau), b = moneyNum(eos.tienmatban), c = moneyNum(eos.chuyenkhoan), d = moneyNum(eos.tienmatdem);
+    const expected = q + b;
+    const variance = d - expected;
+    const total = b + c;
+    const over = Math.abs(variance) > RECON_THRESHOLD;
+    const row = (k, label) => (React.createElement("div", { key: k, style: { marginBottom: 10 } },
+        React.createElement("span", { style: tinyLbl }, label),
+        React.createElement("input", { value: eos[k] || "", inputMode: "numeric", onChange: (e) => setVal(k, e.target.value), style: inputStyle })));
+    return (React.createElement("div", { style: { marginBottom: 16 } },
+        React.createElement(FieldLabel, { Icon: BarChart3, color: C.teal, label: "\u0110\u1ED1i so\u00E1t ti\u1EC1n cu\u1ED1i ca" }),
+        React.createElement("div", { style: { background: C.surface, border: `1px solid ${C.line}`, borderRadius: 13, padding: 13 } },
+            row("quydau", "Quỹ đầu ca (đồng)"),
+            row("tienmatban", "Tiền mặt bán trong ca (đồng)"),
+            row("chuyenkhoan", "Chuyển khoản / thẻ (đồng)"),
+            row("tienmatdem", "Tiền mặt thực đếm (đồng)"),
+            React.createElement("div", { style: { borderTop: `1px dashed ${C.line}`, marginTop: 6, paddingTop: 10 } },
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 13.5 } },
+                    React.createElement("span", { style: { color: C.inkSoft } }, "T\u1ED5ng doanh thu"),
+                    React.createElement("b", null,
+                        fmt(total),
+                        "\u0111")),
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 13.5 } },
+                    React.createElement("span", { style: { color: C.inkSoft } }, "Ti\u1EC1n m\u1EB7t \u0111\u00E1ng l\u1EBD"),
+                    React.createElement("b", null,
+                        fmt(expected),
+                        "\u0111")),
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", padding: "5px 0", fontSize: 15.5 } },
+                    React.createElement("span", { style: { fontWeight: 700 } }, "Ch\u00EAnh l\u1EC7ch"),
+                    React.createElement("b", { style: { color: over ? C.coral : C.teal } },
+                        variance >= 0 ? "+" : "",
+                        fmt(variance),
+                        "\u0111")),
+                over && React.createElement("p", { style: { fontSize: 12, color: C.coral, marginTop: 2 } },
+                    "L\u1EC7ch qu\u00E1 ",
+                    fmt(RECON_THRESHOLD),
+                    "\u0111 \u2014 s\u1EBD v\u00E0o H\u1ED9p x\u1EED l\u00FD cho qu\u1EA3n l\u00FD.")))));
+}
+function ReconSummary({ eos }) {
+    const q = moneyNum(eos.quydau), b = moneyNum(eos.tienmatban), c = moneyNum(eos.chuyenkhoan), d = moneyNum(eos.tienmatdem);
+    const expected = q + b;
+    const variance = d - expected;
+    const over = Math.abs(variance) > RECON_THRESHOLD;
+    const Rw = (l, v) => (React.createElement("div", { style: { display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13.5 } },
+        React.createElement("span", { style: { color: C.inkSoft } }, l),
+        React.createElement("b", null,
+            fmt(v),
+            "\u0111")));
+    return (React.createElement(React.Fragment, null,
+        React.createElement(Label, null, "\u0110\u1ED1i so\u00E1t ti\u1EC1n cu\u1ED1i ca"),
+        React.createElement("div", { style: { background: C.surface, border: `1px solid ${over ? C.coral : C.line}`, borderRadius: 14, padding: 14, marginBottom: 18 } },
+            Rw("Quỹ đầu ca", q),
+            Rw("Tiền mặt bán", b),
+            Rw("Chuyển khoản / thẻ", c),
+            Rw("Tiền mặt thực đếm", d),
+            Rw("Tiền mặt đáng lẽ", expected),
+            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", padding: "6px 0 2px", fontSize: 15.5, borderTop: `1px dashed ${C.line}`, marginTop: 4 } },
+                React.createElement("span", { style: { fontWeight: 700 } }, "Ch\u00EAnh l\u1EC7ch"),
+                React.createElement("b", { style: { color: over ? C.coral : C.teal } },
+                    variance >= 0 ? "+" : "",
+                    fmt(variance),
+                    "\u0111")))));
+}
 /* ================= Menu, recipe and cost ================= */
 const fmt = (n) => (Number(n) || 0).toLocaleString("vi-VN");
 const MENU_CATEGORIES = ["Xà lát · Salad", "Súp", "Bánh mì · Burger", "Mỳ Ý · Pasta", "Kid Corner", "Mexico", "Steak Black Angus", "Món chính", "Nhật · Sashimi", "Nhật · Maki", "Nhật · Set Family", "Nhật · Ramen", "Nhật · Nướng", "Nhật · Chiên", "Nhật · Cơm/Bento", "Snack & Cold Cuts", "Tráng miệng", "Món chay", "Pizza"];
@@ -1070,20 +1154,29 @@ function costColor(pct) { if (pct <= 0)
     return C.teal; if (pct < 50)
     return C.gold; return C.coral; }
 const REAL_DISHES = [{ "id": "d_xa_lat_hoang_e_voi_tom", "name": "Xà lát Hoàng Đế với Tôm", "category": "Xà lát · Salad", "price": 110000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_xa_lat_phomai_tuoi_kieu_y_burrata", "name": "Xà lát Phomai Tươi kiểu Ý (Burrata)", "category": "Xà lát · Salad", "price": 195000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_xa_lat_ca_hoi_bo", "name": "Xà lát Cá Hồi Bơ", "category": "Xà lát · Salad", "price": 195000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_xa_lat_ca_ngu_ai_duong", "name": "Xà lát Cá Ngừ Đại Dương", "category": "Xà lát · Salad", "price": 135000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_xa_lat_trai_cay_mua_he", "name": "Xà lát Trái Cây Mùa Hè", "category": "Xà lát · Salad", "price": 100000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_xa_lat_ca_ngu_nicoise", "name": "Xà lát Cá Ngừ Nicoise", "category": "Xà lát · Salad", "price": 130000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_xa_lat_dua_hau_kieu_y", "name": "Xà lát Dưa Hấu kiểu Ý", "category": "Xà lát · Salad", "price": 105000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_xa_lat_hy_lap", "name": "Xà lát Hy Lạp", "category": "Xà lát · Salad", "price": 95000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_xa_lat_cu_den_nuong", "name": "Xà lát Củ Dền Nướng", "category": "Xà lát · Salad", "price": 145000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_sup_lua_mach_thit_bo", "name": "Súp Lúa Mạch Thịt Bò", "category": "Súp", "price": 110000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_sup_ca_chua_kieu_y", "name": "Súp Cà Chua Kiểu Ý", "category": "Súp", "price": 75000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_sup_kem_nam_truffle", "name": "Súp Kem Nấm Truffle", "category": "Súp", "price": 90000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_banh_mi_sourdough_tom_bo", "name": "Bánh Mì Sourdough Tôm & Bơ", "category": "Bánh mì · Burger", "price": 105000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_banh_mi_sourdough_ca_hoi_xong_khoi", "name": "Bánh Mì Sourdough Cá Hồi Xông Khói", "category": "Bánh mì · Burger", "price": 115000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_cuon_ga_gion_sot_tabasco", "name": "Cuộn Gà Giòn Sốt Tabasco", "category": "Bánh mì · Burger", "price": 120000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_burger_bbq_bo", "name": "Burger BBQ Bò", "category": "Bánh mì · Burger", "price": 140000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_burger_bbq_heo", "name": "Burger BBQ Heo", "category": "Bánh mì · Burger", "price": 140000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_sandwich_thit_nguoi_y", "name": "Sandwich Thịt Nguội Ý", "category": "Bánh mì · Burger", "price": 135000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_sandwich_ca_ngu_cay_phomai", "name": "Sandwich Cá Ngừ Cay Phomai", "category": "Bánh mì · Burger", "price": 125000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_sandwich_thit_xong_khoi_bo", "name": "Sandwich Thịt Xông Khói & Bơ", "category": "Bánh mì · Burger", "price": 130000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_sandwich_monte_cristo", "name": "Sandwich Monte Cristo", "category": "Bánh mì · Burger", "price": 120000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_my_y_sot_hai_san_tom_yum_signature", "name": "Mỳ Ý Sốt Hải Sản Tom Yum (Signature)", "category": "Mỳ Ý · Pasta", "price": 195000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_my_y_lop_kieu_y_lasagne", "name": "Mỳ Ý Lốp Kiểu Ý (Lasagne)", "category": "Mỳ Ý · Pasta", "price": 175000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_my_y_tom_tuoi_sot_nam", "name": "Mỳ Ý Tôm Tươi Sốt Nấm", "category": "Mỳ Ý · Pasta", "price": 145000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_my_y_cua_sot_ca_chua", "name": "Mỳ Ý Cua Sốt Cà Chua", "category": "Mỳ Ý · Pasta", "price": 260000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_my_en_voi_muc", "name": "Mỳ Đen Với Mực", "category": "Mỳ Ý · Pasta", "price": 190000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_my_napolitan_kieu_nhat", "name": "Mỳ Napolitan kiểu Nhật", "category": "Mỳ Ý · Pasta", "price": 109000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_my_y_sot_kem_nhum", "name": "Mỳ Ý Sốt Kem Nhum", "category": "Mỳ Ý · Pasta", "price": 155000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_my_y_sot_putanesca", "name": "Mỳ Ý Sốt Putanesca", "category": "Mỳ Ý · Pasta", "price": 220000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_my_y_pesto_ga_nuong", "name": "Mỳ Ý Pesto Gà Nướng", "category": "Mỳ Ý · Pasta", "price": 155000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_my_y_tom_sot_kem_rose", "name": "Mỳ Ý Tôm Sốt Kem Rose", "category": "Mỳ Ý · Pasta", "price": 155000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_super_kid_2_nguoi", "name": "Super Kid (2 người)", "category": "Kid Corner", "price": 399000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_super_hero_3_nguoi", "name": "Super Hero (3 người)", "category": "Kid Corner", "price": 529000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_banh_burrito_thit_bo", "name": "Bánh Burrito Thịt Bò", "category": "Mexico", "price": 120000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_banh_burrito_thit_ga", "name": "Bánh Burrito Thịt Gà", "category": "Mexico", "price": 115000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_banh_kep_thit_ga_quesadilla", "name": "Bánh Kẹp Thịt Gà (Quesadilla)", "category": "Mexico", "price": 135000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_banh_kep_thit_bo_quesadilla", "name": "Bánh Kẹp Thịt Bò (Quesadilla)", "category": "Mexico", "price": 135000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_nachos_bo", "name": "Nachos Bò", "category": "Mexico", "price": 120000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_tacos_ga", "name": "Tacos Gà", "category": "Mexico", "price": 135000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_tacos_bo", "name": "Tacos Bò", "category": "Mexico", "price": 135000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_au_than_ngoai_cao_cap_ribeye", "name": "Đầu Thăn Ngoại Cao Cấp – Ribeye", "category": "Steak Black Angus", "price": 495000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_than_ngoai_cao_cap_striploin", "name": "Thăn Ngoại Cao Cấp – Striploin", "category": "Steak Black Angus", "price": 430000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_diem_than_bo_cao_cap_skirt", "name": "Diềm Thăn Bò Cao Cấp – Skirt", "category": "Steak Black Angus", "price": 349000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_ca_hoi_nuong_sot_chanh_day", "name": "Cá Hồi Nướng Sốt Chanh Dây", "category": "Món chính", "price": 355000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_tom_phomai_bo_lo", "name": "Tôm Phomai Bơ Lò", "category": "Món chính", "price": 220000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_bap_cuu_ham_vang_o", "name": "Bắp Cừu Hầm Vang Đỏ", "category": "Món chính", "price": 465000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_set_sashimi_co_ban", "name": "Set Sashimi Cơ Bản", "category": "Nhật · Sashimi", "price": 225000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_set_sashimi_ac_biet", "name": "Set Sashimi Đặc Biệt", "category": "Nhật · Sashimi", "price": 395000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_maki_pansy", "name": "Maki Pansy", "category": "Nhật · Maki", "price": 125000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_maki_ca_hoi", "name": "Maki Cá Hồi", "category": "Nhật · Maki", "price": 175000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_maki_luon_nuong", "name": "Maki Lươn Nướng", "category": "Nhật · Maki", "price": 150000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_maki_ca_ngu", "name": "Maki Cá Ngừ", "category": "Nhật · Maki", "price": 145000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_california_roll", "name": "California Roll", "category": "Nhật · Maki", "price": 110000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_set_family_1", "name": "Set Family 1", "category": "Nhật · Set Family", "price": 395000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_set_family_2", "name": "Set Family 2", "category": "Nhật · Set Family", "price": 515000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_set_family_3", "name": "Set Family 3", "category": "Nhật · Set Family", "price": 315000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_set_family_4", "name": "Set Family 4", "category": "Nhật · Set Family", "price": 455000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_set_nigiri_tong_hop", "name": "Set Nigiri Tổng Hợp", "category": "Nhật · Set Family", "price": 215000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_set_gunkan_tong_hop", "name": "Set Gunkan Tổng Hợp", "category": "Nhật · Set Family", "price": 355000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_my_tantan", "name": "Mỳ Tantan", "category": "Nhật · Ramen", "price": 110000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_my_tonkotsu", "name": "Mỳ Tonkotsu", "category": "Nhật · Ramen", "price": 110000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_luon_nuong_unagi_yaki", "name": "Lươn Nướng – Unagi Yaki", "category": "Nhật · Nướng", "price": 195000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_ca_hoi_nuong_muoi", "name": "Cá Hồi Nướng Muối", "category": "Nhật · Nướng", "price": 210000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_ca_saba_nuong_muoi", "name": "Cá Saba Nướng Muối", "category": "Nhật · Nướng", "price": 195000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_tom_chien_kieu_nhat", "name": "Tôm Chiên Kiểu Nhật", "category": "Nhật · Chiên", "price": 95000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_muc_chien_kieu_nhat", "name": "Mực Chiên Kiểu Nhật", "category": "Nhật · Chiên", "price": 155000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_ha_cao_chien", "name": "Há Cảo Chiên", "category": "Nhật · Chiên", "price": 145000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_com_luon_unagi_don", "name": "Cơm Lươn – Unagi Don", "category": "Nhật · Cơm/Bento", "price": 225000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_com_ca_saba_nuong", "name": "Cơm Cá Saba Nướng", "category": "Nhật · Cơm/Bento", "price": 210000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_com_bo_xao_gyu_don", "name": "Cơm Bò Xào – Gyu Don", "category": "Nhật · Cơm/Bento", "price": 115000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_banh_kep_heo_nuong_bbq", "name": "Bánh Kẹp Heo Nướng BBQ", "category": "Snack & Cold Cuts", "price": 85000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_croquette_khoai_tay_nhoi_mozzarella", "name": "Croquette Khoai Tây Nhồi Mozzarella", "category": "Snack & Cold Cuts", "price": 95000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_canh_ga_thao_moc", "name": "Cánh Gà Thảo Mộc", "category": "Snack & Cold Cuts", "price": 125000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_ca_chem_chien_gion_kieu_au", "name": "Cá Chẽm Chiên Giòn Kiểu Âu", "category": "Snack & Cold Cuts", "price": 95000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_cold_cuts_390k", "name": "Cold Cuts 390K", "category": "Snack & Cold Cuts", "price": 399000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_cold_cuts_690k", "name": "Cold Cuts 690K", "category": "Snack & Cold Cuts", "price": 599000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_kem_vani_xoai_matcha_socola_dua_2_vi", "name": "Kem (Vani / Xoài / Matcha / Socola / Dừa) – 2 viên", "category": "Tráng miệng", "price": 35000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_banh_phomai_nga", "name": "Bánh Phomai Nga", "category": "Tráng miệng", "price": 60000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_red_velvet_cheese", "name": "Red Velvet Cheese", "category": "Tráng miệng", "price": 65000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_tiramisu", "name": "Tiramisu", "category": "Tráng miệng", "price": 60000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_banh_phomai_cheese_cake", "name": "Bánh Phomai (Cheese Cake)", "category": "Tráng miệng", "price": 60000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_lava_cake", "name": "Lava Cake", "category": "Tráng miệng", "price": 60000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_pancake_trai_cay", "name": "Pancake Trái Cây", "category": "Tráng miệng", "price": 90000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_pancake_chuoi", "name": "Pancake Chuối", "category": "Tráng miệng", "price": 90000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_meusli_granola_hoa_qua", "name": "Meusli Granola Hoa Quả", "category": "Tráng miệng", "price": 85000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_pansy_summer_smoothie", "name": "Pansy Summer Smoothie", "category": "Tráng miệng", "price": 85000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_tropical_smoothie", "name": "Tropical Smoothie", "category": "Tráng miệng", "price": 85000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_xa_lat_phomai_gion_chay", "name": "Xà Lát Phomai Giòn Chay", "category": "Món chay", "price": 115000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_xa_lat_phomai_burrata_chay", "name": "Xà Lát Phomai Burrata (chay)", "category": "Món chay", "price": 195000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_sup_bi_o_nuong", "name": "Súp Bí Đỏ Nướng", "category": "Món chay", "price": 65000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_banh_nachos_mexico_nhan_au_ham", "name": "Bánh Nachos Mexico Nhân Đậu Hầm", "category": "Món chay", "price": 120000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_banh_tacos_mexico_nhan_au_ham", "name": "Bánh Tacos Mexico Nhân Đậu Hầm", "category": "Món chay", "price": 120000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_banh_quesadila_ap_chao_nhan_au_phoma", "name": "Bánh Quesadila Áp Chảo Nhân Đậu Phomai", "category": "Món chay", "price": 120000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_my_y_sot_ca_chua_chay", "name": "Mỳ Ý Sốt Cà Chua (chay)", "category": "Món chay", "price": 110000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_my_y_xao_toi_ot_voi_rau_xanh", "name": "Mỳ Ý Xào Tỏi Ớt Với Rau Xanh", "category": "Món chay", "price": 110000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_rau_cu_thap_cam_phomai_ut_lo", "name": "Rau Củ Thập Cẩm Phomai Đút Lò", "category": "Món chay", "price": 125000, "hero": null, "ingredients": [], "steps": [] }, { "id": "d_pizza_ca_hoi_kem_kieu_nga", "name": "Pizza Cá Hồi Kem Kiểu Nga", "category": "Pizza", "price": 160000, "hero": null, "ingredients": [], "steps": [], "note": "Nhỏ 160.000đ · Lớn 230.000đ" }, { "id": "d_pizza_seafood", "name": "Pizza Seafood", "category": "Pizza", "price": 170000, "hero": null, "ingredients": [], "steps": [], "note": "Nhỏ 170.000đ · Lớn 230.000đ" }, { "id": "d_pizza_chicken_bacon_ranch", "name": "Pizza Chicken Bacon Ranch", "category": "Pizza", "price": 160000, "hero": null, "ingredients": [], "steps": [], "note": "Nhỏ 160.000đ · Lớn 210.000đ" }, { "id": "d_pizza_veggie", "name": "Pizza Veggie", "category": "Pizza", "price": 130000, "hero": null, "ingredients": [], "steps": [], "note": "Nhỏ 130.000đ · Lớn 175.000đ" }, { "id": "d_pizza_marinara", "name": "Pizza Marinara", "category": "Pizza", "price": 80000, "hero": null, "ingredients": [], "steps": [], "note": "Nhỏ 80.000đ · Lớn 115.000đ" }, { "id": "d_pizza_meat_lover", "name": "Pizza Meat Lover", "category": "Pizza", "price": 160000, "hero": null, "ingredients": [], "steps": [], "note": "Nhỏ 160.000đ · Lớn 210.000đ" }, { "id": "d_pizza_bo_kho", "name": "Pizza Bò Kho", "category": "Pizza", "price": 160000, "hero": null, "ingredients": [], "steps": [], "note": "Nhỏ 160.000đ · Lớn 210.000đ" }, { "id": "d_pizza_tonno_e_cipolla", "name": "Pizza Tonno E Cipolla", "category": "Pizza", "price": 140000, "hero": null, "ingredients": [], "steps": [], "note": "Nhỏ 140.000đ · Lớn 210.000đ" }, { "id": "d_pizza_hawaii", "name": "Pizza Hawaii", "category": "Pizza", "price": 140000, "hero": null, "ingredients": [], "steps": [], "note": "Nhỏ 140.000đ · Lớn 210.000đ" }, { "id": "d_pizza_4_cheese", "name": "Pizza 4 Cheese", "category": "Pizza", "price": 160000, "hero": null, "ingredients": [], "steps": [], "note": "Nhỏ 160.000đ · Lớn 230.000đ" }];
+const REAL_DRINKS = [{ "id": "dk_cappuccino", "name": "CAPPUCCINO", "category": "Cà phê", "price": 40000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_orange_juice_nuoc_cam_tuoi", "name": "ORANGE JUICE / Nước Cam Tươi", "category": "Nước ép", "price": 50000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_sinh_to_xoai_mango_smoothies", "name": "Sinh Tố Xoài- Mango Smoothies", "category": "Sinh tố", "price": 55000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_bia_lon_sai_gon_saigon_can_beer", "name": "Bia Lon Sài Gòn/Saigon Can Beer", "category": "Bia", "price": 35000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_passion_juice_nuoc_chanh_day_tuoi", "name": "PASSION JUICE / Nước Chanh Dây Tươi", "category": "Nước ép", "price": 50000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_water_melon_juice_nuoc_dua_hau_tuo", "name": "WATER MELON JUICE / Nước Dưa Hấu Tươi", "category": "Nước ép", "price": 49000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_tavernello_trebbiano_chardonnay_ly", "name": "Tavernello – Trebbiano Chardonnay (Ly)", "category": "Rượu vang", "price": 85000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_ca_phe_cot_dua_coconut_milk_coffee", "name": "Cà phê cốt dừa/Coconut Milk Coffee", "category": "Cà phê", "price": 50000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_coke", "name": "COKE", "category": "Nước ngọt · Nước suối", "price": 28000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_pineapple_juice_nuoc_thom_tuoi", "name": "PINEAPPLE JUICE / Nước Thơm Tươi", "category": "Nước ép", "price": 50000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_ca_phe_kem_trung_egg_coffee", "name": "Cà phê kem trứng/Egg Coffee", "category": "Cà phê", "price": 55000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_coconut_juice_nuoc_dua_tuoi", "name": "COCONUT JUICE / Nước Dừa Tươi", "category": "Nước ép", "price": 50000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_sinh_to_dau_strawberry_smoothies", "name": "Sinh tố dâu - Strawberry Smoothies", "category": "Sinh tố", "price": 55000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_ca_phe_kem_muoi_salted_cream_coffe", "name": "Cà phê kem muối/Salted Cream Coffee", "category": "Cà phê", "price": 49000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_tra_ao_hoa_cuc_golden_peach", "name": "Trà đào hoa cúc ( Golden peach )", "category": "Trà · Kombucha", "price": 55000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_bia_chai_thu_cong_ibero_ha_noi_aut", "name": "Bia Chai thủ công Ibero Hà Nội Autumn/Ibero Hanoi Autumn Craft Beer", "category": "Bia", "price": 60000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_tra_hoa_cuc_tao_o_blue_pea_jasmine", "name": "Trà hoa cúc táo đỏ/ Blue pea jasmine tea", "category": "Trà · Kombucha", "price": 55000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_latte", "name": "Latte", "category": "Cà phê", "price": 40000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_tra_oolong_nhai_oolong_tea", "name": "Trà Oolong nhài/Oolong Tea", "category": "Đồ uống khác", "price": 55000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_sinh_to_dua_coconut_smoothies", "name": "Sinh tố dừa - Coconut Smoothies", "category": "Sinh tố", "price": 55000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_tra_ao_cam_sa_peach_orange_lemongr", "name": "Trà Đào Cam Sả/Peach Orange Lemongrass Tea", "category": "Đồ uống khác", "price": 55000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_kombucha_chanh_leo_xoai", "name": "Kombucha Chanh Leo xoài", "category": "Trà · Kombucha", "price": 55000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_tra_hoa_nhai_au_biec_violet_jasmin", "name": "Trà hoa nhài đậu biếc ( Violet Jasmine )", "category": "Trà · Kombucha", "price": 55000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_americano", "name": "AMERICANO", "category": "Cà phê", "price": 35000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_suoi_dasani_500ml", "name": "Suối Dasani 500ml", "category": "Nước ngọt · Nước suối", "price": 14000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_kombucha_dua_dua", "name": "Kombucha Dừa Dứa", "category": "Trà · Kombucha", "price": 55000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_sprite", "name": "SPRITE", "category": "Nước ngọt · Nước suối", "price": 30000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_classic_mojito", "name": "CLASSIC MOJITO", "category": "Cocktail · Mocktail", "price": 129000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_magarita", "name": "Magarita", "category": "Cocktail · Mocktail", "price": 160000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_santa_s_gift", "name": "Santa's gift", "category": "Cocktail · Mocktail", "price": 150000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_long_island_iced_tea", "name": "Long Island Iced Tea", "category": "Cocktail · Mocktail", "price": 140000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_mai_tai", "name": "Mai Tai", "category": "Cocktail · Mocktail", "price": 160000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_pink_lady", "name": "Pink Lady", "category": "Cocktail · Mocktail", "price": 130000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_nha_trang_beach", "name": "Nha Trang beach", "category": "Cocktail · Mocktail", "price": 70000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_sex_on_the_beach", "name": "Sex On The Beach", "category": "Cocktail · Mocktail", "price": 151000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_tra_vai_hoa_hong_lychee_rose_tea", "name": "Trà Vải Hoa Hồng/Lychee Rose Tea", "category": "Đồ uống khác", "price": 55000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_corona", "name": "Corona", "category": "Bia", "price": 56000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_venus_mitologia_nero_di_troi_ly", "name": "Venus Mitologia – Nero Di Troi (Ly)", "category": "Rượu vang", "price": 90000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_yellow_tail_sauvignon_blanc", "name": "Yellow Tail - Sauvignon Blanc", "category": "Rượu mạnh", "price": 795000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_tavernello_trebbiano_chardonnay_ch", "name": "Tavernello – Trebbiano Chardonnay (Chai)", "category": "Rượu vang", "price": 395000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_tra_hibicus_nhiet_oi", "name": "Trà Hibicus nhiệt đới", "category": "Trà · Kombucha", "price": 55000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_kombucha_dau", "name": "Kombucha Dâu", "category": "Trà · Kombucha", "price": 55000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_dolce_novella_sweet_wine_italia_ly", "name": "Dolce Novella - Sweet Wine - Italia (Ly)", "category": "Rượu vang", "price": 130000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_matcha_latte", "name": "Matcha Latte", "category": "Đồ uống khác", "price": 50000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_tequila_sunrise", "name": "Tequila Sunrise", "category": "Cocktail · Mocktail", "price": 150000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_heineken_beer", "name": "Heineken beer", "category": "Bia", "price": 40000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_yellow_tail_pinot_noir", "name": "Yellow Tail - Pinot Noir", "category": "Rượu mạnh", "price": 795000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_blanc_1664_beer", "name": "Blanc 1664 beer", "category": "Bia", "price": 34000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_passion_in_me", "name": "Passion In Me", "category": "Cocktail · Mocktail", "price": 115000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_smirnoff_red_ly", "name": "Smirnoff red (Ly)", "category": "Rượu mạnh", "price": 43000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_soda_water", "name": "SODA WATER", "category": "Nước ngọt · Nước suối", "price": 30000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_hibiscus_gin_fizz", "name": "Hibiscus Gin Fizz", "category": "Cocktail · Mocktail", "price": 130000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_new_york_sour", "name": "New York Sour", "category": "Cocktail · Mocktail", "price": 160000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_jose_cuervo_especial_gold", "name": "Jose Cuervo Especial Gold", "category": "Rượu mạnh", "price": 65000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_espresso", "name": "ESPRESSO", "category": "Cà phê", "price": 30000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_cacao_hot_cold", "name": "Cacao (hot/cold)", "category": "Cà phê", "price": 45000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_chocolate_a_xay", "name": "Chocolate đá xay", "category": "Đồ uống khác", "price": 60000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_pansy_sour", "name": "Pansy sour", "category": "Cocktail · Mocktail", "price": 170000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_absolut", "name": "Absolut", "category": "Rượu mạnh", "price": 933000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_bac_xiu_vietnamese_flat_white_coff", "name": "Bạc Xỉu / VIETNAMESE FLAT WHITE COFFEE", "category": "Cà phê", "price": 45000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_ca_phe_pha_phin_sua_uong_filter_ca", "name": "Cà phê pha phin ( sữa/đường)/Filter café", "category": "Cà phê", "price": 34000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_hibiscus_purple", "name": "Hibiscus Purple", "category": "Cocktail · Mocktail", "price": 70000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_jameson_irish_whisky", "name": "Jameson Irish Whisky", "category": "Rượu mạnh", "price": 65000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_louis_latour_ardeche_chardonnay", "name": "Louis Latour Ardèche Chardonnay", "category": "Rượu mạnh", "price": 895000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_b52", "name": "B52", "category": "Cocktail · Mocktail", "price": 65000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_yellow_tail_shiraz", "name": "Yellow Tail - Shiraz", "category": "Rượu mạnh", "price": 795000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_absolut_ly", "name": "Absolut (Ly)", "category": "Rượu mạnh", "price": 60000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_monteverdi_moscato_oltrepo_chai", "name": "Monteverdi – Moscato Oltrepo (Chai)", "category": "Rượu vang", "price": 775000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_smirnoff_red", "name": "Smirnoff red", "category": "Rượu mạnh", "price": 700000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_bacardi_gold", "name": "Bacardi gold", "category": "Rượu mạnh", "price": 50000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_ballantine_finest_shot", "name": "Ballantine Finest (Shot)", "category": "Đồ uống khác", "price": 60000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_venus_mitologia_nero_di_troi_chai", "name": "Venus Mitologia – Nero Di Troi (Chai)", "category": "Rượu mạnh", "price": 395000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_coconut_matcha", "name": "Coconut Matcha", "category": "Trà · Kombucha", "price": 55000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_chateau_pey_la_tour", "name": "Château Pey La Tour", "category": "Rượu mạnh", "price": 1095000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_bombay_sapphire_ly", "name": "Bombay Sapphire (Ly)", "category": "Rượu mạnh", "price": 55000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_johnnie_walker_black_lable_ly", "name": "Johnnie Walker Black Lable (Ly)", "category": "Rượu mạnh", "price": 70000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_james_bone_martini", "name": "James Bone Martini", "category": "Cocktail · Mocktail", "price": 130000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_tonic", "name": "TONIC", "category": "Nước ngọt · Nước suối", "price": 30000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_matcha_a_xay", "name": "Matcha đá xay", "category": "Đồ uống khác", "price": 60000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_ballantine_finest", "name": "Ballantine Finest", "category": "Rượu mạnh", "price": 60000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_the_beach_house_sauvignon_blanc_so", "name": "The Beach House - Sauvignon Blanc - South Africa", "category": "Rượu vang", "price": 750000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_bia_heinieken_tiec", "name": "Bia Heinieken(Tiệc)", "category": "Bia", "price": 30000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_bacardi_light", "name": "Bacardi Light", "category": "Rượu mạnh", "price": 50000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_dolce_novella_sweet_wine_italia_ch", "name": "Dolce Novella - Sweet Wine - Italia (Chai)", "category": "Rượu vang", "price": 595000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_bourbon_jim_beam_ly", "name": "Bourbon Jim Beam (Ly)", "category": "Rượu mạnh", "price": 70000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_phi_ruou_mang_vao", "name": "Phí rượu mang vào", "category": "Rượu mạnh", "price": 100000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_jack_deniel_s_bourbon", "name": "Jack Deniel's Bourbon", "category": "Rượu mạnh", "price": 80000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_nuoc_khoang_co_ga_lavie_450ml", "name": "Nước khoáng có ga Lavie 450ml", "category": "Đồ uống khác", "price": 60000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_perrier_can_250ml_perrier_250ml_wa", "name": "Perrier can 250ml/Perrier 250ml Water", "category": "Nước ngọt · Nước suối", "price": 60000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_gordon_ly", "name": "Gordon (Ly)", "category": "Rượu mạnh", "price": 45000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_lime_juice_nuoc_chanh_tuoi", "name": "LIME JUICE / Nước Chanh Tươi", "category": "Nước ép", "price": 50000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_phi_nuoc_suoi_mang_vao", "name": "Phí nước suối mang vào", "category": "Đồ uống khác", "price": 100000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_the_night_sky", "name": "The night sky", "category": "Cocktail · Mocktail", "price": 149000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_margarita", "name": "MARGARITA", "category": "Cocktail · Mocktail", "price": 140000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_christmas_tree", "name": "Christmas tree", "category": "Cocktail · Mocktail", "price": 69000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_ruou_etsuno_hajime_300ml", "name": "Rượu Etsuno Hajime 300ml", "category": "Rượu mạnh", "price": 250000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_captain_morgan_gold_ly", "name": "Captain morgan gold (Ly)", "category": "Rượu mạnh", "price": 55000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_lavie_400ml", "name": "Lavie 400ml", "category": "Đồ uống khác", "price": 25000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_dasani_tiec", "name": "Dasani ( Tiệc)", "category": "Đồ uống khác", "price": 15000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_sprite_tiec", "name": "Sprite(Tiệc)", "category": "Nước ngọt · Nước suối", "price": 20000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }, { "id": "dk_coca_cola_tiec", "name": "Coca Cola(Tiệc)", "category": "Nước ngọt · Nước suối", "price": 20000, "kind": "drink", "hero": null, "ingredients": [], "steps": [] }];
+const DRINK_CATEGORIES = ["Cà phê", "Nước ép", "Sinh tố", "Bia", "Rượu vang", "Nước ngọt · Nước suối", "Trà · Kombucha", "Đồ uống khác", "Cocktail · Mocktail", "Rượu mạnh"];
+const REAL_MENU = REAL_DISHES.concat(REAL_DRINKS);
+const MENU_VER = "v2";
 const SAMPLE_DISH = REAL_DISHES[0];
 /* Menu list body (rendered inside manager tabs) */
-function MenuBody({ dishes, showCost = true, canAdd = true, onOpen, onAdd, onReload }) {
+function MenuBody({ dishes, showCost = true, canAdd = true, onOpen, onAdd, onReload, kind = "all" }) {
+    const [mtab, setMtab] = useState(kind === "drink" ? "drink" : "food");
     if (dishes === null)
         return React.createElement("p", { style: { color: C.inkSoft, fontSize: 14, padding: "24px 0", textAlign: "center" } }, "\u0110ang t\u1EA3i th\u1EF1c \u0111\u01A1n");
-    const avgPct = dishes.length ? Math.round(dishes.reduce((s, d) => s + foodCostPct(d), 0) / dishes.length) : 0;
-    const cats = MENU_CATEGORIES.filter((c) => dishes.some((d) => d.category === c));
-    const others = dishes.filter((d) => !MENU_CATEGORIES.includes(d.category));
+    const cur = kind === "all" ? mtab : kind;
+    const list = (dishes || []).filter((d) => (d.kind || "food") === cur);
+    const catList = cur === "drink" ? DRINK_CATEGORIES : MENU_CATEGORIES;
+    const avgPct = list.length ? Math.round(list.reduce((s, d) => s + foodCostPct(d), 0) / list.length) : 0;
+    const cats = catList.filter((c) => list.some((d) => d.category === c));
+    const others = list.filter((d) => !catList.includes(d.category));
     return (React.createElement("div", null,
+        kind === "all" && (React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 14, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 11, padding: 4 } }, [["food", "Đồ ăn"], ["drink", "Đồ uống"]].map(([k, l]) => (React.createElement("button", { key: k, onClick: () => setMtab(k), style: { flex: 1, padding: "9px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13.5, fontWeight: 700, background: mtab === k ? C.teal : "transparent", color: mtab === k ? "#fff" : C.inkSoft } }, l))))),
         showCost ? (React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 16 } },
-            React.createElement(Stat, { Icon: BookOpen, label: "S\u1ED1 m\u00F3n", value: dishes.length }),
+            React.createElement(Stat, { Icon: BookOpen, label: "S\u1ED1 m\u00F3n", value: list.length }),
             React.createElement(Stat, { Icon: Percent, label: "Food cost TB", value: avgPct + "%" }),
-            React.createElement(Stat, { Icon: Coins, label: "Cost m\u1ED7i ph\u1EA7n", value: dishes.length ? fmt(Math.round(dishes.reduce((s, d) => s + perServingCost(d), 0) / dishes.length)) : 0 }))) : (React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 16 } },
-            React.createElement(Stat, { Icon: BookOpen, label: "S\u1ED1 m\u00F3n", value: dishes.length }),
+            React.createElement(Stat, { Icon: Coins, label: "Cost m\u1ED7i ph\u1EA7n", value: list.length ? fmt(Math.round(list.reduce((s, d) => s + perServingCost(d), 0) / list.length)) : 0 }))) : (React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 16 } },
+            React.createElement(Stat, { Icon: BookOpen, label: "S\u1ED1 m\u00F3n", value: list.length }),
             React.createElement(Stat, { Icon: UtensilsCrossed, label: "Nh\u00F3m m\u00F3n", value: cats.length + (others.length ? 1 : 0) }))),
         React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 } },
             React.createElement(Label, { nomargin: true }, "Danh s\u00E1ch m\u00F3n"),
@@ -1093,12 +1186,12 @@ function MenuBody({ dishes, showCost = true, canAdd = true, onOpen, onAdd, onRel
                 canAdd && React.createElement("button", { onClick: onAdd, style: { ...chipBtn, color: "#fff", background: C.teal, border: "none" } },
                     React.createElement(Plus, { size: 14 }),
                     " Th\u00EAm m\u00F3n"))),
-        dishes.length === 0 && (React.createElement("div", { style: { textAlign: "center", padding: "40px 20px", background: C.surface, borderRadius: 14, border: `1px dashed ${C.line}` } },
+        list.length === 0 && (React.createElement("div", { style: { textAlign: "center", padding: "40px 20px", background: C.surface, borderRadius: 14, border: `1px dashed ${C.line}` } },
             React.createElement(BookOpen, { size: 30, color: C.inkSoft, style: { marginBottom: 10 } }),
-            React.createElement("p", { style: { color: C.inkSoft, fontSize: 14, lineHeight: 1.5 } }, "Ch\u01B0a c\u00F3 m\u00F3n n\u00E0o trong th\u1EF1c \u0111\u01A1n."))),
+            React.createElement("p", { style: { color: C.inkSoft, fontSize: 14, lineHeight: 1.5 } }, "Ch\u01B0a c\u00F3 m\u00F3n n\u00E0o trong m\u1EE5c n\u00E0y."))),
         cats.map((cat) => (React.createElement("div", { key: cat, style: { marginBottom: 18 } },
             React.createElement("p", { style: { fontSize: 12, fontWeight: 700, color: C.gold, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 9 } }, cat),
-            React.createElement("div", { style: { display: "grid", gap: 10 } }, dishes.filter((d) => d.category === cat).map((d) => React.createElement(MenuCard, { key: d.id, dish: d, showCost: showCost, onClick: () => onOpen(d) })))))),
+            React.createElement("div", { style: { display: "grid", gap: 10 } }, list.filter((d) => d.category === cat).map((d) => React.createElement(MenuCard, { key: d.id, dish: d, showCost: showCost, onClick: () => onOpen(d) })))))),
         others.length > 0 && (React.createElement("div", { style: { marginBottom: 18 } },
             React.createElement("p", { style: { fontSize: 12, fontWeight: 700, color: C.gold, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 9 } }, "Kh\u00E1c"),
             React.createElement("div", { style: { display: "grid", gap: 10 } }, others.map((d) => React.createElement(MenuCard, { key: d.id, dish: d, showCost: showCost, onClick: () => onOpen(d) })))))));
@@ -1338,30 +1431,38 @@ const SAMPLE_STAFF = [
     { id: "r7", name: "Nguyễn Hữu Hơn", posId: "nvphucvu" },
     { id: "r8", name: "Thảo Trang", posId: "thungan" },
 ];
-const ROLE_RANK = { giamdoc: 0, quanly: 1, totruong: 2, nhanvien: 3 };
+const ROLE_RANK = { giamdoc: 0, quanly: 1, beptruong: 2, totruong: 2, nhanvien: 3 };
 function staffRank(s) {
-    const lv = (s && s.accessLevel) || "nhanvien";
-    let r = ROLE_RANK[lv] != null ? ROLE_RANK[lv] : 3;
-    if (r === 3) {
-        const lead = ["truongbar", "bectruong", "becpho"];
-        if (lead.includes(s.posId))
-            r = 2;
-    }
-    return r;
+    const r = ROLE_RANK[levelForPos(s && s.posId)];
+    return r != null ? r : 3;
 }
 function sortByRank(list) { return [...(list || [])].map((s, i) => [s, i]).sort((a, b) => staffRank(a[0]) - staffRank(b[0]) || a[1] - b[1]).map((x) => x[0]); }
-const LEVELS = { giamdoc: "Giám đốc vận hành", quanly: "Quản lý nhà hàng", totruong: "Tổ trưởng", nhanvien: "Nhân viên" };
-const LEVEL_OPTIONS = ["nhanvien", "totruong", "quanly", "giamdoc"];
+const LEVELS = { giamdoc: "Giám đốc vận hành", quanly: "Quản lý nhà hàng", beptruong: "Quản lý bếp", totruong: "Tổ trưởng", nhanvien: "Nhân viên" };
+/* Quyền suy trực tiếp từ chức danh (vị trí) — không chọn tay nữa */
+function levelForPos(posId) {
+    if (posId === "giamdocvh")
+        return "giamdoc";
+    if (posId === "quanly")
+        return "quanly";
+    if (posId === "bectruong" || posId === "becpho")
+        return "beptruong";
+    if (posId === "tttphucvu" || posId === "truongbar")
+        return "totruong";
+    return "nhanvien";
+}
 const KITCHEN_IDS = ["bectruong", "becpho", "becchinh", "phubec"];
+const BAR_IDS = ["truongbar", "nvbar"];
+function menuKindFor(posId) { if (KITCHEN_IDS.includes(posId))
+    return "food"; if (BAR_IDS.includes(posId))
+    return "drink"; return "all"; }
 function capsFor(emp) {
-    const lv = (emp && emp.accessLevel) || "nhanvien";
-    const kitchenLead = emp && (emp.posId === "bectruong" || emp.posId === "becpho");
+    const lv = levelForPos(emp && emp.posId);
     if (lv === "giamdoc")
-        return { manage: true, menu: true, menuEdit: true, showCost: true, staffEdit: true, schedule: true, rewardEdit: true, rosterEdit: true, scopeIds: null, title: LEVELS.giamdoc };
+        return { manage: true, menu: true, menuEdit: true, showCost: true, staffEdit: true, schedule: true, rewardEdit: true, rosterEdit: true, scopeIds: null, menuKind: "all", title: LEVELS.giamdoc };
     if (lv === "quanly")
-        return { manage: true, menu: true, menuEdit: true, showCost: true, staffEdit: true, schedule: true, rewardEdit: false, rosterEdit: true, scopeIds: null, title: LEVELS.quanly };
-    if (kitchenLead)
-        return { manage: true, menu: true, menuEdit: false, showCost: true, staffEdit: false, schedule: false, rewardEdit: false, rosterEdit: true, scopeIds: KITCHEN_IDS, title: (posById(emp.posId) || {}).name || "Quản lý bếp" };
+        return { manage: true, menu: true, menuEdit: true, showCost: true, staffEdit: true, schedule: true, rewardEdit: false, rosterEdit: true, scopeIds: null, menuKind: "all", title: LEVELS.quanly };
+    if (lv === "beptruong")
+        return { manage: true, menu: true, menuEdit: false, showCost: true, staffEdit: false, schedule: false, rewardEdit: false, rosterEdit: true, scopeIds: KITCHEN_IDS, menuKind: "food", title: (posById(emp.posId) || {}).name || "Quản lý bếp" };
     return { manage: false, title: LEVELS[lv] || LEVELS.nhanvien };
 }
 function statsFor(reports, emp) {
@@ -1399,7 +1500,7 @@ function StaffManageBody({ staff, canEdit, onOpen, onAdd, onReload }) {
                 React.createElement("p", { style: { fontSize: 11.5, fontWeight: 800, color: C.gold, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8 } }, g.label),
                 React.createElement("div", { style: { display: "grid", gap: 8 } }, rows.map((s) => {
                     const p = posById(s.posId);
-                    const lv = s.accessLevel || "nhanvien";
+                    const lv = levelForPos(s.posId);
                     return (React.createElement("button", { key: s.id, onClick: () => onOpen(s), style: { width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 12, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 13, padding: "11px 13px", cursor: "pointer" } },
                         React.createElement("span", { style: { width: 38, height: 38, borderRadius: "50%", background: C.tealSoft, display: "grid", placeItems: "center", flexShrink: 0 } }, p ? React.createElement(p.Icon, { size: 18, color: C.teal }) : React.createElement(UserRound, { size: 18, color: C.teal })),
                         React.createElement("span", { style: { flex: 1, minWidth: 0 } },
@@ -1519,7 +1620,6 @@ function StaffForm({ initial, onCancel, onSave }) {
     const [posId, setPosId] = useState(initial ? initial.posId : POSITIONS[0].id);
     const [open, setOpen] = useState(initial && initial.open ? initial.open : "");
     const [close, setClose] = useState(initial && initial.close ? initial.close : "");
-    const [level, setLevel] = useState(initial && initial.accessLevel ? initial.accessLevel : "nhanvien");
     const tl = { display: "block", fontSize: 12, color: C.inkSoft, marginBottom: 5 };
     return (React.createElement("div", { className: "fade", style: { padding: "20px 18px 30px" } },
         React.createElement(TopBar, { title: initial ? "Sửa nhân viên" : "Thêm nhân viên", subtitle: "\u0110\u0103ng k\u00FD \u0111\u1EC3 \u0111\u0103ng nh\u1EADp b\u1EB1ng t\u00EAn", onBack: onCancel }),
@@ -1529,9 +1629,12 @@ function StaffForm({ initial, onCancel, onSave }) {
         GROUPS.map((g) => (React.createElement("div", { key: g.id, style: { marginBottom: 14 } },
             React.createElement("p", { style: { fontSize: 11.5, fontWeight: 700, color: C.gold, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8 } }, g.label),
             React.createElement("div", { style: { display: "flex", gap: 7, flexWrap: "wrap" } }, POSITIONS.filter((p) => p.group === g.id).map((p) => (React.createElement("button", { key: p.id, onClick: () => setPosId(p.id), style: { fontSize: 12.5, fontWeight: 600, padding: "8px 11px", borderRadius: 10, cursor: "pointer", border: `1px solid ${posId === p.id ? C.teal : C.line}`, background: posId === p.id ? C.teal : C.surface, color: posId === p.id ? "#fff" : C.inkSoft } }, p.name))))))),
-        React.createElement(Label, null, "Ph\u00E2n quy\u1EC1n"),
-        React.createElement("div", { style: { display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 18 } }, LEVEL_OPTIONS.map((lv) => (React.createElement("button", { key: lv, onClick: () => setLevel(lv), style: { fontSize: 12.5, fontWeight: 600, padding: "8px 12px", borderRadius: 10, cursor: "pointer", border: `1px solid ${level === lv ? C.teal : C.line}`, background: level === lv ? C.teal : C.surface, color: level === lv ? "#fff" : C.inkSoft } }, LEVELS[lv])))),
-        React.createElement("p", { style: { fontSize: 12.5, color: C.inkSoft, marginBottom: 18, lineHeight: 1.45 } }, "Nh\u00E2n vi\u00EAn ch\u1EC9 l\u00E0m checklist c\u1EE7a m\u00ECnh. T\u1ED5 tr\u01B0\u1EDFng xem \u0111\u01B0\u1EE3c \u0111\u1ED9i c\u1EE7a b\u1ED9 ph\u1EADn. Qu\u1EA3n l\u00FD v\u00E0 gi\u00E1m \u0111\u1ED1c xem to\u00E0n qu\u00E1n."),
+        React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", background: C.tealSoft, borderRadius: 12, padding: "11px 13px", marginBottom: 18 } },
+            React.createElement(ShieldCheck, { size: 16, color: C.teal }),
+            React.createElement("span", { style: { fontSize: 13, color: C.ink, lineHeight: 1.4 } },
+                "Quy\u1EC1n t\u1EF1 g\u00E1n theo ch\u1EE9c danh: ",
+                React.createElement("b", null, LEVELS[levelForPos(posId)]),
+                ". Kh\u00F4ng c\u1EA7n ch\u1ECDn tay.")),
         React.createElement(Label, null, "Gi\u1EDD ca ri\u00EAng n\u1EBFu kh\u00E1c b\u1ED9 ph\u1EADn"),
         React.createElement("p", { style: { fontSize: 12.5, color: C.inkSoft, marginBottom: 10, lineHeight: 1.45 } }, "\u0110\u1EC3 tr\u1ED1ng n\u1EBFu d\u00F9ng gi\u1EDD c\u1EE7a b\u1ED9 ph\u1EADn ho\u1EB7c gi\u1EDD m\u1EB7c \u0111\u1ECBnh."),
         React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 22 } },
@@ -1541,7 +1644,7 @@ function StaffForm({ initial, onCancel, onSave }) {
             React.createElement("div", { style: { flex: 1 } },
                 React.createElement("span", { style: tl }, "\u0110\u00F3ng ca"),
                 React.createElement("input", { type: "time", value: close, onChange: (e) => setClose(e.target.value), style: inputStyle }))),
-        React.createElement(PrimaryButton, { onClick: () => onSave({ id: initial ? initial.id : "st_" + Date.now(), name: name.trim() || "Chưa đặt tên", posId, open: open || "", close: close || "", accessLevel: level }) },
+        React.createElement(PrimaryButton, { onClick: () => onSave({ id: initial ? initial.id : "st_" + Date.now(), name: name.trim() || "Chưa đặt tên", posId, open: open || "", close: close || "", accessLevel: levelForPos(posId) }) },
             React.createElement(Check, { size: 17 }),
             " ",
             initial ? "Lưu thay đổi" : "Thêm vào danh sách")));
@@ -1608,7 +1711,7 @@ function PeriodPicker({ period, setPeriod }) {
                 React.createElement("span", { style: { display: "block", fontSize: 11.5, color: C.inkSoft, marginBottom: 5 } }, "\u0110\u1EBFn ng\u00E0y"),
                 React.createElement("input", { type: "date", value: period.to || "", onChange: (e) => setPeriod({ id: "custom", from: period.from || "", to: e.target.value }), style: inputStyle }))))));
 }
-function OverviewBody({ reports, staff, target, onSetTarget, onOpenReport, schedule, resolved, onToggleIssue, onOpenInbox, onEditSchedule, onOpenCompliance, onOpenRoster, onOpenTraining, period, setPeriod, range }) {
+function OverviewBody({ reports, staff, target, onSetTarget, onOpenReport, schedule, resolved, onToggleIssue, onOpenInbox, onEditSchedule, onOpenCompliance, onOpenRoster, onOpenTraining, onOpen86, period, setPeriod, range }) {
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(String(target || ""));
     const [roster, setRoster] = useState({});
@@ -1661,6 +1764,9 @@ function OverviewBody({ reports, staff, target, onSetTarget, onOpenReport, sched
             React.createElement("button", { onClick: onOpenTraining, style: chipBtn },
                 React.createElement(GraduationCap, { size: 13 }),
                 " \u0110\u00E0o t\u1EA1o"),
+            React.createElement("button", { onClick: onOpen86, style: chipBtn },
+                React.createElement(Flame, { size: 13 }),
+                " H\u1EBFt m\u00F3n"),
             onEditSchedule && React.createElement("button", { onClick: onEditSchedule, style: chipBtn },
                 React.createElement(Clock, { size: 13 }),
                 " Gi\u1EDD ca")),
@@ -1787,27 +1893,122 @@ function ScheduleEditor({ initial, onCancel, onSave }) {
             " L\u01B0u gi\u1EDD ca")));
 }
 /* Staff browses the menu without cost */
-function StaffMenu({ onBack }) {
+function canEdit86(emp, kind) {
+    const lv = levelForPos(emp && emp.posId);
+    if (lv === "giamdoc" || lv === "quanly")
+        return true;
+    if (kind === "food")
+        return KITCHEN_IDS.includes(emp.posId);
+    if (kind === "drink")
+        return BAR_IDS.includes(emp.posId);
+    return false;
+}
+function EightySixView({ emp, onBack }) {
+    const [items, setItems] = useState(null);
+    const [dishes, setDishes] = useState([]);
+    const [adding, setAdding] = useState(false);
+    const [q, setQ] = useState("");
+    const iso = todayIso();
+    const key = "86:" + iso;
+    useEffect(() => {
+        (async () => {
+            const raw = await safeGet(key, true);
+            let arr = [];
+            if (raw) {
+                try {
+                    arr = JSON.parse(raw);
+                }
+                catch (_a) { }
+            }
+            setItems(arr);
+            const mraw = await safeGet("menu:dishes", true);
+            let ds = REAL_MENU;
+            if (mraw) {
+                try {
+                    ds = JSON.parse(mraw);
+                }
+                catch (_b) { }
+            }
+            setDishes(ds);
+        })();
+    }, []);
+    const canFood = canEdit86(emp, "food");
+    const canDrink = canEdit86(emp, "drink");
+    const editableKinds = [];
+    if (canFood)
+        editableKinds.push("food");
+    if (canDrink)
+        editableKinds.push("drink");
+    async function persist(arr) { setItems(arr); await safeSet(key, JSON.stringify(arr), true); }
+    function add(d) { if (items.some((x) => x.id === d.id))
+        return; persist([...items, { id: d.id, name: d.name, kind: d.kind || "food", by: emp.name, at: new Date().toISOString() }]); setQ(""); }
+    function remove(id) { persist(items.filter((x) => x.id !== id)); }
+    if (items === null)
+        return React.createElement("div", { className: "fade", style: { padding: "20px 18px" } },
+            React.createElement(TopBar, { title: "H\u1EBFt m\u00F3n h\u00F4m nay", onBack: onBack }),
+            React.createElement("p", { style: { color: C.inkSoft, fontSize: 14, textAlign: "center", padding: "20px 0" } }, "\u0110ang t\u1EA3i"));
+    const ql = q.trim().toLowerCase();
+    const pickable = dishes.filter((d) => editableKinds.includes(d.kind || "food") && !items.some((x) => x.id === d.id) && (!ql || d.name.toLowerCase().includes(ql))).slice(0, 40);
+    const food = items.filter((x) => (x.kind || "food") === "food");
+    const drink = items.filter((x) => x.kind === "drink");
+    const renderGroup = (label, arr, kind) => arr.length === 0 ? null : (React.createElement("div", { style: { marginBottom: 16 } },
+        React.createElement("p", { style: { fontSize: 11.5, fontWeight: 800, color: C.gold, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8 } },
+            label,
+            " (",
+            arr.length,
+            ")"),
+        React.createElement("div", { style: { display: "grid", gap: 8 } }, arr.map((x) => (React.createElement("div", { key: x.id, style: { display: "flex", alignItems: "center", gap: 10, background: "#FFE9ED", border: `1px solid #F3B6BE`, borderRadius: 12, padding: "10px 12px" } },
+            React.createElement("span", { style: { flex: 1, minWidth: 0 } },
+                React.createElement("span", { style: { display: "block", fontWeight: 700, fontSize: 14.5, color: "#C0392B" } }, x.name),
+                React.createElement("span", { style: { display: "block", fontSize: 11.5, color: C.inkSoft } },
+                    "b\u00E1o b\u1EDFi ",
+                    x.by)),
+            canEdit86(emp, kind) && React.createElement("button", { onClick: () => remove(x.id), style: { ...chipBtn, color: C.teal, borderColor: C.teal } }, "C\u00F2n h\u00E0ng l\u1EA1i")))))));
+    return (React.createElement("div", { className: "fade", style: { padding: "20px 18px 30px" } },
+        React.createElement(TopBar, { title: "H\u1EBFt m\u00F3n h\u00F4m nay", subtitle: fmtDateVN(iso), onBack: onBack }),
+        editableKinds.length > 0 ? (React.createElement("button", { onClick: () => setAdding((a) => !a), style: { ...chipBtn, color: "#fff", background: C.coral, border: "none", marginBottom: 14 } },
+            React.createElement(Plus, { size: 14 }),
+            " B\u00E1o m\u00F3n h\u1EBFt")) : (React.createElement("p", { style: { fontSize: 12.5, color: C.inkSoft, marginBottom: 14, lineHeight: 1.4 } }, "B\u1EA1n xem \u0111\u1EC3 bi\u1EBFt m\u00F3n n\u00E0o \u0111ang h\u1EBFt. Ch\u1EC9 b\u1EBFp (\u0111\u1ED3 \u0103n) v\u00E0 bar (\u0111\u1ED3 u\u1ED1ng) \u0111\u01B0\u1EE3c c\u1EADp nh\u1EADt.")),
+        adding && editableKinds.length > 0 && (React.createElement("div", { className: "fade", style: { background: C.surface, border: `1px solid ${C.line}`, borderRadius: 13, padding: 13, marginBottom: 16 } },
+            React.createElement("div", { style: { position: "relative", marginBottom: 10 } },
+                React.createElement(Search, { size: 16, color: C.inkSoft, style: { position: "absolute", left: 12, top: 12 } }),
+                React.createElement("input", { value: q, onChange: (e) => setQ(e.target.value), placeholder: "T\u00ECm m\u00F3n \u0111\u1EC3 b\u00E1o h\u1EBFt", style: { ...inputStyle, paddingLeft: 36 }, autoFocus: true })),
+            React.createElement("div", { style: { display: "grid", gap: 6, maxHeight: 300, overflowY: "auto" } },
+                pickable.map((d) => (React.createElement("button", { key: d.id, onClick: () => add(d), style: { width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 10, background: C.bg, border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", cursor: "pointer" } },
+                    (d.kind === "drink") ? React.createElement(Wine, { size: 15, color: C.teal }) : React.createElement(UtensilsCrossed, { size: 15, color: C.gold }),
+                    React.createElement("span", { style: { flex: 1, fontSize: 13.5 } }, d.name),
+                    React.createElement(Plus, { size: 15, color: C.coral })))),
+                pickable.length === 0 && React.createElement("p", { style: { fontSize: 13, color: C.inkSoft, textAlign: "center", padding: "10px 0" } }, "Kh\u00F4ng c\u00F3 m\u00F3n ph\u00F9 h\u1EE3p.")))),
+        items.length === 0 ? (React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center", background: C.tealSoft, borderRadius: 12, padding: "12px 14px" } },
+            React.createElement(CircleCheck, { size: 18, color: C.teal }),
+            React.createElement("span", { style: { fontSize: 13.5, color: C.ink } }, "H\u00F4m nay ch\u01B0a c\u00F3 m\u00F3n n\u00E0o b\u00E1o h\u1EBFt. \u0110\u1EE7 h\u00E0ng ph\u1EE5c v\u1EE5."))) : (React.createElement(React.Fragment, null,
+            renderGroup("Đồ ăn", food, "food"),
+            renderGroup("Đồ uống", drink, "drink")))));
+}
+function StaffMenu({ posId, onBack }) {
     const [dishes, setDishes] = useState(null);
     const [dish, setDish] = useState(null);
+    const kind = menuKindFor(posId);
     async function load() {
+        const ver = await safeGet("menu:ver", true);
         const raw = await safeGet("menu:dishes", true);
-        if (raw) {
+        if (raw && ver === MENU_VER) {
             try {
                 setDishes(JSON.parse(raw));
                 return;
             }
             catch (_a) { }
         }
-        await safeSet("menu:dishes", JSON.stringify(REAL_DISHES), true);
-        setDishes(REAL_DISHES);
+        await safeSet("menu:dishes", JSON.stringify(REAL_MENU), true);
+        await safeSet("menu:ver", MENU_VER, true);
+        setDishes(REAL_MENU);
     }
     useEffect(() => { load(); }, []);
     if (dish)
         return React.createElement(DishDetail, { dish: dish, showCost: false, onBack: () => setDish(null) });
     return (React.createElement("div", { className: "fade", style: { padding: "20px 18px 30px" } },
-        React.createElement(TopBar, { title: "Th\u1EF1c \u0111\u01A1n", subtitle: "C\u00F4ng th\u1EE9c v\u00E0 c\u00E1ch l\u00E0m", onBack: onBack }),
-        React.createElement(MenuBody, { dishes: dishes, showCost: false, canAdd: false, onOpen: (d) => setDish(d), onReload: load })));
+        React.createElement(TopBar, { title: kind === "drink" ? "Thực đơn đồ uống" : kind === "food" ? "Thực đơn đồ ăn" : "Thực đơn", subtitle: "C\u00F4ng th\u1EE9c v\u00E0 c\u00E1ch l\u00E0m", onBack: onBack }),
+        React.createElement(MenuBody, { dishes: dishes, showCost: false, canAdd: false, kind: kind, onOpen: (d) => setDish(d), onReload: load })));
 }
 /* Staff sees own performance */
 function StaffSelfPerf({ emp, onBack }) {
