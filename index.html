@@ -996,7 +996,10 @@ function ManagerFlow({ me, onLogout }) {
     ];
     return (React.createElement("div", { className: "fade", style: { padding: "20px 18px" } },
         React.createElement(TopBar, { title: VENUE, subtitle: `${me.name} · ${caps.title}`, onBack: onLogout }),
-        React.createElement("div", { style: { display: "flex", gap: 4, marginBottom: 18, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: 4, overflowX: "auto" } }, tabs.map((t) => React.createElement(TabBtn, { key: t.id, active: tab === t.id, onClick: () => setTab(t.id), Icon: t.Icon, label: t.label }))),
+        React.createElement("div", { style: { position: "relative", marginBottom: 18 } },
+            React.createElement("div", { style: { display: "flex", gap: 4, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: 4, overflowX: "auto" } }, tabs.map((t) => React.createElement(TabBtn, { key: t.id, active: tab === t.id, onClick: () => setTab(t.id), Icon: t.Icon, label: t.label }))),
+            React.createElement("div", { style: { position: "absolute", top: 1, bottom: 1, left: 1, width: 24, background: `linear-gradient(to right, ${C.surface}, transparent)`, pointerEvents: "none", borderRadius: "11px 0 0 11px" } }),
+            React.createElement("div", { style: { position: "absolute", top: 1, bottom: 1, right: 1, width: 24, background: `linear-gradient(to left, ${C.surface}, transparent)`, pointerEvents: "none", borderRadius: "0 11px 11px 0" } })),
         tab === "overview" ? (React.createElement(OverviewBody, { reports: rangeReports, staff: scopedStaff, target: target, onSetTarget: saveTarget, onOpenReport: (r) => setOpenReport(r), schedule: schedule, resolved: resolved, onToggleIssue: toggleIssue, onOpenInbox: () => setShowInbox(true), onEditSchedule: caps.schedule ? () => setScheduleOpen(true) : null, onOpenCompliance: () => setShowCompliance(true), onOpenRoster: () => setShowRoster(true), onOpenTraining: () => setTraining({ mode: "hub" }), onOpen86: () => setShow86(true), onOpenIncident: () => setShowIncident(true), onOpenPlans: () => setShowPlans(true), onOpenPoints: () => setShowPoints(true), period: period, setPeriod: setPeriod, range: range })) : tab === "reports" ? (React.createElement(React.Fragment, null,
             normalReports && normalReports.length > 0 && (React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 16 } },
                 React.createElement(Stat, { Icon: ClipboardList, label: "B\u00E1o c\u00E1o", value: normalReports.length }),
@@ -3145,5 +3148,5 @@ const pill = { fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadiu
 const inputStyle = { width: "100%", border: `1px solid ${C.line}`, borderRadius: 11, padding: "12px 13px", fontSize: 14.5, color: C.ink, background: C.surface };
 
 try { createRoot(document.getElementById("root")).render(React.createElement(App)); }
-catch (e) { document.getElementById("root").innerHTML = '<div id="boot">Lỗi tải ứng dụng: ' + (e && e.message ? e.message : e) + '<br/>Kiểm tra mạng rồi tải lại.</div>'; }
+catch (e) { document.getElementById("root").innerHTML = '<div id="boot">Lỗi tải ứng dụng: ' + (e && e.message ? e.message : e) + '</div>'; }
 </script></body></html>
