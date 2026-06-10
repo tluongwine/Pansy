@@ -351,7 +351,7 @@ async function safeGet(key, shared) {
         const r = await withTimeout(window.storage.get(key, shared), 3500);
         return r ? r.value : (key in memStore ? memStore[key] : null);
     }
-    catch (_a) {
+    catch {
         return key in memStore ? memStore[key] : null;
     }
 }
@@ -363,7 +363,7 @@ async function safeSet(key, value, shared) {
         await withTimeout(window.storage.set(key, value, shared), 3500);
         return true;
     }
-    catch (_a) {
+    catch {
         return false;
     }
 }
@@ -378,7 +378,7 @@ async function safeRemove(key, shared) {
             return await withTimeout(window.storage.remove(key, shared), 3500);
         return await withTimeout(window.storage.set(key, "", shared), 3500); /* fallback: blank out the heavy value */
     }
-    catch (_a) {
+    catch {
         return false;
     }
 }
@@ -390,7 +390,7 @@ async function safeList(prefix, shared) {
         const r = await withTimeout(window.storage.list(prefix, shared), 3500);
         return r && r.keys ? r : memKeys();
     }
-    catch (_a) {
+    catch {
         return memKeys();
     }
 }
@@ -414,14 +414,14 @@ async function purgeOldReports() {
                     removed++;
                 }
             }
-            catch (_a) {
+            catch {
                 await safeRemove(k, true);
                 removed++;
             }
         }
         return removed;
     }
-    catch (_b) {
+    catch {
         return 0;
     }
 }
@@ -478,7 +478,7 @@ async function seedDemoData() {
         }
         await safeSet("seed:demo_v2", "1", true);
     }
-    catch (_a) { }
+    catch { }
 }
 /* ================= App ================= */
 export default function App() {
@@ -492,7 +492,7 @@ export default function App() {
                 setStaff(JSON.parse(raw));
                 return;
             }
-            catch (_a) { }
+            catch { }
         }
         await safeSet("staff:list", JSON.stringify(SAMPLE_STAFF), true);
         await safeSet("staff:ver", "v3", true);
@@ -565,7 +565,7 @@ function StaffWork({ emp, onLogout }) {
         try {
             setRoster(JSON.parse(raw));
         }
-        catch (_a) { }
+        catch { }
     } })(); }, []);
     const pos = emp ? posById(emp.posId) : null;
     const cp = pos && type ? pos.checkpoints[type] : null;
@@ -748,7 +748,7 @@ function ChecklistItem({ item, state, onChange }) {
             try {
                 added.push(await downscale(f));
             }
-            catch (_a) { }
+            catch { }
         }
         const next = [...photos, ...added];
         onChange({ photos: next, photo: undefined, done: next.length > 0 });
@@ -800,6 +800,7 @@ function ManagerFlow({ me, onLogout }) {
     const [showIncident, setShowIncident] = useState(false);
     const [showPlans, setShowPlans] = useState(false);
     const [showPoints, setShowPoints] = useState(false);
+    const [showManage, setShowManage] = useState(false);
     const [scheduleOpen, setScheduleOpen] = useState(false);
     const [showCompliance, setShowCompliance] = useState(false);
     const [showRoster, setShowRoster] = useState(false);
@@ -817,13 +818,13 @@ function ManagerFlow({ me, onLogout }) {
                     try {
                         items.push(JSON.parse(v));
                     }
-                    catch (_a) { }
+                    catch { }
                 }
             }
             items.sort((a, b) => (b.submittedAt || "").localeCompare(a.submittedAt || ""));
             setReports(items);
         }
-        catch (_b) {
+        catch {
             setReports([]);
         }
     }
@@ -836,7 +837,7 @@ function ManagerFlow({ me, onLogout }) {
                 setDishes(JSON.parse(raw));
                 return;
             }
-            catch (_a) { }
+            catch { }
         }
         await safeSet("menu:dishes", JSON.stringify(REAL_MENU), true);
         await safeSet("menu:ver", MENU_VER, true);
@@ -850,7 +851,7 @@ function ManagerFlow({ me, onLogout }) {
                 setStaff(JSON.parse(raw));
                 return;
             }
-            catch (_a) { }
+            catch { }
         }
         await safeSet("staff:list", JSON.stringify(SAMPLE_STAFF), true);
         setStaff(SAMPLE_STAFF);
@@ -871,7 +872,7 @@ function ManagerFlow({ me, onLogout }) {
             try {
                 setResolved(JSON.parse(raw));
             }
-            catch (_a) {
+            catch {
                 setResolved({});
             }
         }
@@ -885,7 +886,7 @@ function ManagerFlow({ me, onLogout }) {
                 setSchedule(JSON.parse(raw));
                 return;
             }
-            catch (_a) { }
+            catch { }
         }
         const init = { default: { open: "08:00", close: "22:00" }, positions: {} };
         await safeSet("settings:schedule", JSON.stringify(init), true);
@@ -908,7 +909,7 @@ function ManagerFlow({ me, onLogout }) {
                 setReward(JSON.parse(raw));
                 return;
             }
-            catch (_a) { }
+            catch { }
         }
         const init = { good: 90, bad: 60, reward: 200000, penalty: 200000 };
         await safeSet("settings:reward", JSON.stringify(init), true);
@@ -969,6 +970,10 @@ function ManagerFlow({ me, onLogout }) {
         return React.createElement(PlanBoard, { me: me, isDirector: levelForPos(me.posId) === "giamdoc", staff: staff, onBack: () => setShowPlans(false) });
     if (showPoints)
         return React.createElement(PointsBoard, { me: me, scopeIds: caps.scopeIds, showMoney: true, onBack: () => setShowPoints(false) });
+    if (showManage)
+        return React.createElement("div", { className: "fade", style: { padding: "20px 18px 30px" } },
+            React.createElement(TopBar, { title: "Danh s\u00E1ch nh\u00E2n vi\u00EAn", onBack: () => setShowManage(false) }),
+            React.createElement(StaffManageBody, { staff: scopedStaff, canEdit: caps.staffEdit, onOpen: (e) => setStaffView({ mode: "detail", emp: e }), onAdd: () => setStaffView({ mode: "form", emp: null }), onReload: loadStaff }));
     if (scheduleOpen && caps.schedule)
         return React.createElement(ScheduleEditor, { initial: schedule, onCancel: () => setScheduleOpen(false), onSave: saveSchedule });
     if (showCompliance)
@@ -985,9 +990,9 @@ function ManagerFlow({ me, onLogout }) {
     const tabs = [
         { id: "overview", Icon: LayoutDashboard, label: "Tổng quan" },
         { id: "reports", Icon: ClipboardList, label: "Báo cáo" },
+        { id: "nhansu", Icon: Users, label: "Nhân sự" },
         ...(caps.menu ? [{ id: "menu", Icon: BookOpen, label: "Thực đơn" }] : []),
-        { id: "staff", Icon: Award, label: "Hiệu suất" },
-        ...(caps.staffEdit ? [{ id: "nhansu", Icon: Users, label: "Nhân sự" }] : []),
+        { id: "plans", Icon: Target, label: "Kế hoạch" },
     ];
     return (React.createElement("div", { className: "fade", style: { padding: "20px 18px" } },
         React.createElement(TopBar, { title: VENUE, subtitle: `${me.name} · ${caps.title}`, onBack: onLogout }),
@@ -997,7 +1002,7 @@ function ManagerFlow({ me, onLogout }) {
                 React.createElement(Stat, { Icon: ClipboardList, label: "B\u00E1o c\u00E1o", value: normalReports.length }),
                 React.createElement(Stat, { Icon: CircleCheck, label: "\u0110\u00E3 ch\u1EA5m", value: reviewed }),
                 React.createElement(Stat, { Icon: BarChart3, label: "Trung b\u00ECnh", value: normalReports.length ? Math.round(normalReports.reduce((s, r) => s + (r.pct || 0), 0) / normalReports.length) + "%" : "0%" }))),
-            React.createElement("div", { style: { display: "flex", gap: 7, marginBottom: 14, overflowX: "auto", paddingBottom: 2 } },
+            React.createElement("div", { style: { display: "flex", gap: 7, marginBottom: 14, overflowX: "auto", paddingBottom: 2, WebkitMaskImage: HFADE, maskImage: HFADE } },
                 React.createElement(FilterChip, { active: filter === "all", onClick: () => setFilter("all"), label: "T\u1EA5t c\u1EA3" }),
                 PHASE_ORDER.map((ph) => React.createElement(FilterChip, { key: ph, active: filter === ph, onClick: () => setFilter(ph), label: PHASE[ph].label }))),
             React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
@@ -1009,7 +1014,25 @@ function ManagerFlow({ me, onLogout }) {
             shown && shown.length === 0 && (React.createElement("div", { style: { textAlign: "center", padding: "40px 20px", background: C.surface, borderRadius: 14, border: `1px dashed ${C.line}` } },
                 React.createElement(ImageIcon, { size: 30, color: C.inkSoft, style: { marginBottom: 10 } }),
                 React.createElement("p", { style: { color: C.inkSoft, fontSize: 14, lineHeight: 1.5 } }, "Ch\u01B0a c\u00F3 b\u00E1o c\u00E1o n\u00E0o \u1EDF m\u1EE5c n\u00E0y."))),
-            React.createElement("div", { style: { display: "grid", gap: 10 } }, shown && shown.map((r) => React.createElement(ReportCard, { key: r.id, report: r, onClick: () => setOpenReport(r) }))))) : tab === "menu" ? (React.createElement(MenuBody, { dishes: dishes, showCost: caps.showCost, canAdd: caps.menuEdit, kind: caps.menuKind, onOpen: (d) => setDishView({ mode: "detail", dish: d }), onAdd: () => setDishView({ mode: "form", dish: null }), onReload: loadDishes })) : tab === "nhansu" ? (React.createElement(StaffManageBody, { staff: scopedStaff, canEdit: caps.staffEdit, onOpen: (e) => setStaffView({ mode: "detail", emp: e }), onAdd: () => setStaffView({ mode: "form", emp: null }), onReload: loadStaff })) : (React.createElement(StaffPerfBody, { staff: scopedStaff, reports: rangeReports, period: period, setPeriod: setPeriod, canEdit: caps.staffEdit, onOpen: (e) => setStaffView({ mode: "detail", emp: e }), onAdd: null, onReload: loadStaff }))));
+            React.createElement("div", { style: { display: "grid", gap: 10 } }, shown && shown.map((r) => React.createElement(ReportCard, { key: r.id, report: r, onClick: () => setOpenReport(r) }))))) : tab === "menu" ? (React.createElement(React.Fragment, null,
+            React.createElement("button", { onClick: () => setShow86(true), style: { ...chipBtn, color: "#fff", background: C.coral, border: "none", marginBottom: 14 } },
+                React.createElement(Flame, { size: 14 }),
+                " H\u1EBFt m\u00F3n h\u00F4m nay"),
+            React.createElement(MenuBody, { dishes: dishes, showCost: caps.showCost, canAdd: caps.menuEdit, kind: caps.menuKind, onOpen: (d) => setDishView({ mode: "detail", dish: d }), onAdd: () => setDishView({ mode: "form", dish: null }), onReload: loadDishes }))) : tab === "plans" ? (React.createElement(PlanBoard, { me: me, isDirector: levelForPos(me.posId) === "giamdoc", staff: staff, embedded: true, onBack: () => { } })) : (React.createElement(React.Fragment, null,
+            React.createElement("div", { style: { display: "flex", gap: 7, marginBottom: 16, overflowX: "auto", paddingBottom: 2, WebkitMaskImage: HFADE, maskImage: HFADE } },
+                React.createElement("button", { onClick: () => setShowPoints(true), style: chipBtn },
+                    React.createElement(Coins, { size: 13 }),
+                    " \u0110i\u1EC3m th\u01B0\u1EDFng"),
+                React.createElement("button", { onClick: () => setShowRoster(true), style: chipBtn },
+                    React.createElement(CalendarDays, { size: 13 }),
+                    " L\u1ECBch l\u00E0m vi\u1EC7c"),
+                React.createElement("button", { onClick: () => setTraining({ mode: "hub" }), style: chipBtn },
+                    React.createElement(GraduationCap, { size: 13 }),
+                    " \u0110\u00E0o t\u1EA1o"),
+                React.createElement("button", { onClick: () => setShowManage(true), style: chipBtn },
+                    React.createElement(Users, { size: 13 }),
+                    " Danh s\u00E1ch nh\u00E2n vi\u00EAn")),
+            React.createElement(StaffPerfBody, { staff: scopedStaff, reports: rangeReports, period: period, setPeriod: setPeriod, canEdit: caps.staffEdit, onOpen: (e) => setStaffView({ mode: "detail", emp: e }), onAdd: null, onReload: loadStaff })))));
 }
 function FilterChip({ active, onClick, label }) {
     return React.createElement("button", { onClick: onClick, style: { whiteSpace: "nowrap", fontSize: 13, fontWeight: 600, padding: "7px 13px", borderRadius: 99, cursor: "pointer", border: `1px solid ${active ? C.teal : C.line}`, background: active ? C.teal : C.surface, color: active ? "#fff" : C.inkSoft } }, label);
@@ -1115,6 +1138,7 @@ function StarPicker({ value, onPick }) {
 function avgScore(scores) { const vals = RUBRIC.map((r) => scores[r.id] || 0).filter((v) => v > 0); return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0; }
 /* ===== Điểm thưởng/phạt theo báo cáo cuối ca + sao ===== */
 const POINT_RATE_DEFAULT = 10000;
+const HFADE = "linear-gradient(to right, transparent, #000 14px, #000 calc(100% - 14px), transparent)";
 function pointsForReport(r) {
     if (!r || r.incident || r.type !== "cuoica")
         return null;
@@ -1130,7 +1154,7 @@ function staffMonthPoints(emp, reports, roster, anchorIso) {
     const dayIso = (r) => { try {
         return isoOf(new Date(r.submittedAt));
     }
-    catch (_a) {
+    catch {
         return "";
     } };
     const mine = (reports || []).filter((r) => !r.incident && r.type === "cuoica" && ((r.staffId && r.staffId === emp.id) || (!r.staffId && r.name === emp.name)));
@@ -1809,7 +1833,7 @@ function OverviewBody({ reports, staff, target, onSetTarget, onOpenReport, sched
         try {
             setRoster(JSON.parse(raw));
         }
-        catch (_a) { }
+        catch { }
     } })(); }, []);
     if (reports === null)
         return React.createElement("p", { style: { color: C.inkSoft, fontSize: 14, padding: "24px 0", textAlign: "center" } }, "\u0110ang t\u1EA3i d\u1EEF li\u1EC7u");
@@ -1851,22 +1875,7 @@ function OverviewBody({ reports, staff, target, onSetTarget, onOpenReport, sched
     }).filter(Boolean) : [];
     return (React.createElement("div", null,
         React.createElement(PeriodPicker, { period: period, setPeriod: setPeriod }),
-        React.createElement("div", { style: { display: "flex", gap: 7, marginBottom: 16, overflowX: "auto", paddingBottom: 2 } },
-            React.createElement("button", { onClick: onOpenRoster, style: chipBtn },
-                React.createElement(CalendarDays, { size: 13 }),
-                " L\u1ECBch l\u00E0m vi\u1EC7c"),
-            React.createElement("button", { onClick: onOpenPlans, style: chipBtn },
-                React.createElement(Target, { size: 13 }),
-                " K\u1EBF ho\u1EA1ch"),
-            React.createElement("button", { onClick: onOpenPoints, style: chipBtn },
-                React.createElement(Coins, { size: 13 }),
-                " \u0110i\u1EC3m th\u01B0\u1EDFng"),
-            React.createElement("button", { onClick: onOpenTraining, style: chipBtn },
-                React.createElement(GraduationCap, { size: 13 }),
-                " \u0110\u00E0o t\u1EA1o"),
-            React.createElement("button", { onClick: onOpen86, style: chipBtn },
-                React.createElement(Flame, { size: 13 }),
-                " H\u1EBFt m\u00F3n"),
+        React.createElement("div", { style: { display: "flex", gap: 7, marginBottom: 16, overflowX: "auto", paddingBottom: 2, WebkitMaskImage: HFADE, maskImage: HFADE } },
             React.createElement("button", { onClick: onOpenIncident, style: { ...chipBtn, color: "#fff", background: C.coral, border: "none" } },
                 React.createElement(ShieldAlert, { size: 13 }),
                 " B\u00E1o s\u1EF1 c\u1ED1"),
@@ -2020,7 +2029,7 @@ function PointsBoard({ me, scopeIds, showMoney = true, onBack }) {
                     try {
                         items.push(JSON.parse(v));
                     }
-                    catch (_a) { }
+                    catch { }
                 }
             }
             setReports(items);
@@ -2029,14 +2038,14 @@ function PointsBoard({ me, scopeIds, showMoney = true, onBack }) {
                 try {
                     setStaff(JSON.parse(sraw));
                 }
-                catch (_b) { }
+                catch { }
             }
             const rraw = await safeGet("roster:week", true);
             if (rraw) {
                 try {
                     setRoster(JSON.parse(rraw));
                 }
-                catch (_c) { }
+                catch { }
             }
             const prw = await safeGet("settings:point_rate", true);
             const n = Number(prw);
@@ -2130,7 +2139,6 @@ function planStatusStyle(s) {
 }
 function PlanForm({ initial, staff, isDirector, selfId, onCancel, onSave }) {
     const [t, setT] = useState(initial.title || "");
-    const [cat, setCat] = useState(initial.cat || PLAN_CATS[0]);
     const [assignee, setAssignee] = useState(initial.assigneeId || (isDirector ? ((staff && staff[0] && staff[0].id) || "") : selfId));
     const [desc, setDesc] = useState(initial.desc || "");
     const [due, setDue] = useState(initial.due || "");
@@ -2139,8 +2147,6 @@ function PlanForm({ initial, staff, isDirector, selfId, onCancel, onSave }) {
         React.createElement(TopBar, { title: initial.title ? "Sửa kế hoạch" : "Giao việc mới", onBack: onCancel }),
         React.createElement("span", { style: tl }, "T\u00EAn c\u00F4ng vi\u1EC7c / k\u1EBF ho\u1EA1ch"),
         React.createElement("input", { value: t, onChange: (e) => setT(e.target.value), placeholder: "VD: K\u1EBF ho\u1EA1ch truy\u1EC1n th\u00F4ng th\u00E1ng 7", style: { ...inputStyle, marginBottom: 12 } }),
-        React.createElement("span", { style: tl }, "Lo\u1EA1i"),
-        React.createElement("select", { value: cat, onChange: (e) => setCat(e.target.value), style: { ...inputStyle, marginBottom: 12 } }, PLAN_CATS.map((c) => React.createElement("option", { key: c, value: c }, c))),
         isDirector ? (React.createElement(React.Fragment, null,
             React.createElement("span", { style: tl }, "Giao cho"),
             React.createElement("select", { value: assignee, onChange: (e) => setAssignee(e.target.value), style: { ...inputStyle, marginBottom: 12 } }, (staff || []).map((sx) => React.createElement("option", { key: sx.id, value: sx.id }, sx.name))))) : (React.createElement("div", { style: { background: C.tealSoft, borderRadius: 10, padding: "9px 12px", marginBottom: 12, fontSize: 13, color: C.ink } }, "Vi\u1EC7c n\u00E0y c\u1EE7a ch\u00EDnh b\u1EA1n.")),
@@ -2148,18 +2154,18 @@ function PlanForm({ initial, staff, isDirector, selfId, onCancel, onSave }) {
         React.createElement("input", { type: "date", value: due, onChange: (e) => setDue(e.target.value), style: { ...inputStyle, marginBottom: 12 } }),
         React.createElement("span", { style: tl }, "M\u00F4 t\u1EA3 / y\u00EAu c\u1EA7u"),
         React.createElement("textarea", { value: desc, onChange: (e) => setDesc(e.target.value), rows: 4, placeholder: "M\u1EE5c ti\u00EAu, \u0111\u1EA7u vi\u1EC7c, k\u1EBFt qu\u1EA3 mong \u0111\u1EE3i...", style: { ...inputStyle, minHeight: 90, resize: "vertical", marginBottom: 18 } }),
-        React.createElement(PrimaryButton, { disabled: !t.trim(), onClick: () => onSave({ ...initial, title: t.trim(), cat, assigneeId: isDirector ? assignee : selfId, desc, due }) },
+        React.createElement(PrimaryButton, { disabled: !t.trim(), onClick: () => onSave({ ...initial, title: t.trim(), assigneeId: isDirector ? assignee : selfId, desc, due }) },
             React.createElement(Check, { size: 17 }),
             " L\u01B0u k\u1EBF ho\u1EA1ch")));
 }
-function PlanBoard({ me, isDirector, staff, onBack }) {
+function PlanBoard({ me, isDirector, staff, embedded, onBack }) {
     const [plans, setPlans] = useState(null);
     const [form, setForm] = useState(null);
     useEffect(() => { (async () => { const raw = await safeGet("plans:list", true); let arr = []; if (raw) {
         try {
             arr = JSON.parse(raw);
         }
-        catch (_a) { }
+        catch { }
     } setPlans(arr); })(); }, []);
     async function persist(arr) { setPlans(arr); await safeSet("plans:list", JSON.stringify(arr), true); }
     function save(p) { const arr = plans || []; const next = arr.some((x) => x.id === p.id) ? arr.map((x) => x.id === p.id ? p : x) : [...arr, p]; persist(next); setForm(null); }
@@ -2174,7 +2180,7 @@ function PlanBoard({ me, isDirector, staff, onBack }) {
     const visible = isDirector ? plans : plans.filter((p) => p.assigneeId === me.id);
     const done = visible.filter((p) => p.status === "done").length;
     return (React.createElement("div", { className: "fade", style: { padding: "20px 18px 30px" } },
-        React.createElement(TopBar, { title: "K\u1EBF ho\u1EA1ch c\u00F4ng vi\u1EC7c", subtitle: isDirector ? "Giao việc và theo dõi" : "Việc được giao cho bạn", onBack: onBack }),
+        !embedded && React.createElement(TopBar, { title: "K\u1EBF ho\u1EA1ch c\u00F4ng vi\u1EC7c", subtitle: isDirector ? "Giao việc và theo dõi" : "Việc được giao cho bạn", onBack: onBack }),
         React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 14 } },
             React.createElement(Stat, { Icon: Target, label: "T\u1ED5ng k\u1EBF ho\u1EA1ch", value: visible.length }),
             React.createElement(Stat, { Icon: CheckCheck, label: "Ho\u00E0n th\u00E0nh", value: done + "/" + visible.length })),
@@ -2189,8 +2195,7 @@ function PlanBoard({ me, isDirector, staff, onBack }) {
             const who = (staff || []).find((s) => s.id === p.assigneeId);
             const canStatus = isDirector || p.assigneeId === me.id;
             return (React.createElement("div", { key: p.id, style: { background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 14 } },
-                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 } },
-                    React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: C.gold, textTransform: "uppercase", letterSpacing: ".03em" } }, p.cat),
+                React.createElement("div", { style: { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8 } },
                     React.createElement("span", { style: { fontSize: 11.5, fontWeight: 700, background: ss.bg, color: ss.fg, borderRadius: 99, padding: "3px 9px" } }, PLAN_STATUS_LABEL[p.status])),
                 React.createElement("p", { style: { fontWeight: 700, fontSize: 15, marginTop: 6 } }, p.title),
                 p.desc && React.createElement("p", { style: { fontSize: 13, color: C.inkSoft, marginTop: 4, lineHeight: 1.45, whiteSpace: "pre-wrap" } }, p.desc),
@@ -2227,7 +2232,7 @@ function IncidentReport({ emp, onBack, onDone }) {
             try {
                 add.push(await downscale(f));
             }
-            catch (_a) { }
+            catch { }
         }
         setPhotos((p) => [...p, ...add]);
         setBusy(false);
@@ -2317,7 +2322,7 @@ function EightySixView({ emp, onBack }) {
                 try {
                     arr = JSON.parse(raw);
                 }
-                catch (_a) { }
+                catch { }
             }
             setItems(arr);
             const mraw = await safeGet("menu:dishes", true);
@@ -2326,7 +2331,7 @@ function EightySixView({ emp, onBack }) {
                 try {
                     ds = JSON.parse(mraw);
                 }
-                catch (_b) { }
+                catch { }
             }
             setDishes(ds);
         })();
@@ -2396,7 +2401,7 @@ function StaffMenu({ posId, onBack }) {
                 setDishes(JSON.parse(raw));
                 return;
             }
-            catch (_a) { }
+            catch { }
         }
         await safeSet("menu:dishes", JSON.stringify(REAL_MENU), true);
         await safeSet("menu:ver", MENU_VER, true);
@@ -2427,12 +2432,12 @@ function StaffSelfPerf({ emp, onBack }) {
                         try {
                             items.push(JSON.parse(v));
                         }
-                        catch (_a) { }
+                        catch { }
                     }
                 }
                 setReports(items);
             }
-            catch (_b) {
+            catch {
                 setReports([]);
             }
             const rraw = await safeGet("roster:week", true);
@@ -2440,7 +2445,7 @@ function StaffSelfPerf({ emp, onBack }) {
                 try {
                     setRoster(JSON.parse(rraw));
                 }
-                catch (_c) { }
+                catch { }
             }
             const prw = await safeGet("settings:point_rate", true);
             const n = Number(prw);
@@ -2715,7 +2720,7 @@ function RosterView({ me, canEdit, scopeIds, onBack }) {
                 try {
                     st = JSON.parse(sraw);
                 }
-                catch (_a) { }
+                catch { }
             }
             setStaff(st);
             let r = null;
@@ -2724,7 +2729,7 @@ function RosterView({ me, canEdit, scopeIds, onBack }) {
                 try {
                     r = JSON.parse(rraw);
                 }
-                catch (_b) { }
+                catch { }
             }
             const isCodeFmt = r && Object.keys(r).some((id) => r[id] && Object.values(r[id]).some((v) => typeof v === "string"));
             if (!isCodeFmt) {
@@ -3017,7 +3022,7 @@ function TrainingView({ posId, editable, onBack }) {
                 try {
                     d = JSON.parse(raw);
                 }
-                catch (_a) { }
+                catch { }
             }
             if (!d) {
                 d = defaultTraining();
