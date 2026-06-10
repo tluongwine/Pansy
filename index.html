@@ -1,38 +1,11 @@
 <!doctype html>
-<html lang="vi">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<meta name="theme-color" content="#1877F2" />
-<title>Pansy Bistro - Vận hành theo ca</title>
-<style>
-  html,body{margin:0;padding:0;background:#F0F2F5;-webkit-text-size-adjust:100%}
-  #root{min-height:100vh}
-  #boot{font-family:system-ui,sans-serif;color:#65676B;text-align:center;padding:80px 20px;font-size:15px}
-</style>
-<script>
-/* localStorage-backed storage so data persists on this device */
-(function(){
-  window.storage = {
-    get: async function(k){ try{ var v=localStorage.getItem(k); return v===null?null:{value:v}; }catch(e){ return null; } },
-    set: async function(k,val){ try{ localStorage.setItem(k,val); return true; }catch(e){ return false; } },
-    list: async function(prefix){ var keys=[]; try{ for(var i=0;i<localStorage.length;i++){ var key=localStorage.key(i); if(key && key.indexOf(prefix)===0) keys.push(key);} }catch(e){} return {keys:keys}; },
-    delete: async function(k){ try{ localStorage.removeItem(k); return true; }catch(e){ return false; } }
-  };
-})();
-</script>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@18.3.1",
-    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client?deps=react@18.3.1",
-    "lucide-react": "https://esm.sh/lucide-react@0.383.0?deps=react@18.3.1"
-  }
-}
-</script>
-</head>
-<body>
-<div id="root"><div id="boot">Đang tải Pansy Bistro...</div></div>
+<html lang="vi"><head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta name="theme-color" content="#1877F2" /><title>Pansy Bistro - Vận hành theo ca</title>
+<style>html,body{margin:0;padding:0;background:#F0F2F5;-webkit-text-size-adjust:100%}#root{min-height:100vh}#boot{font-family:system-ui,sans-serif;color:#65676B;text-align:center;padding:80px 20px;font-size:15px}</style>
+<script>(function(){window.storage={get:async function(k){try{var v=localStorage.getItem(k);return v===null?null:{value:v};}catch(e){return null;}},set:async function(k,val){try{localStorage.setItem(k,val);return true;}catch(e){return false;}},list:async function(prefix){var keys=[];try{for(var i=0;i<localStorage.length;i++){var key=localStorage.key(i);if(key&&key.indexOf(prefix)===0)keys.push(key);}}catch(e){}return{keys:keys};},delete:async function(k){try{localStorage.removeItem(k);return true;}catch(e){return false;}}};})();</script>
+<script type="importmap">{"imports":{"react":"https://esm.sh/react@18.3.1","react-dom/client":"https://esm.sh/react-dom@18.3.1/client?deps=react@18.3.1","lucide-react":"https://esm.sh/lucide-react@0.383.0?deps=react@18.3.1"}}</script>
+</head><body><div id="root"><div id="boot">Đang tải Pansy Bistro...</div></div>
 <script type="module">
 import { createRoot } from "react-dom/client";
 import React, { useState, useEffect, useRef, useMemo } from "react";
@@ -451,12 +424,12 @@ async function purgeOldReports() {
 /* Seed demo data: 10 days of sample reports for the sample staff (runs once, only if empty) */
 async function seedDemoData() {
     try {
-        const flag = await safeGet("seed:demo_v1", true);
+        const flag = await safeGet("seed:demo_v2", true);
         if (flag)
             return;
         const existing = await safeList("report:", true);
         if (existing && existing.keys && existing.keys.length > 0) {
-            await safeSet("seed:demo_v1", "1", true);
+            await safeSet("seed:demo_v2", "1", true);
             return;
         }
         const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -499,7 +472,7 @@ async function seedDemoData() {
                 }
             }
         }
-        await safeSet("seed:demo_v1", "1", true);
+        await safeSet("seed:demo_v2", "1", true);
     }
     catch (_a) { }
 }
@@ -508,8 +481,9 @@ export default function App() {
     const [staff, setStaff] = useState(null);
     const [session, setSession] = useState(null);
     async function loadStaffGate() {
+        const ver = await safeGet("staff:ver", true);
         const raw = await safeGet("staff:list", true);
-        if (raw) {
+        if (raw && ver === "v3") {
             try {
                 setStaff(JSON.parse(raw));
                 return;
@@ -517,6 +491,7 @@ export default function App() {
             catch (_a) { }
         }
         await safeSet("staff:list", JSON.stringify(SAMPLE_STAFF), true);
+        await safeSet("staff:ver", "v3", true);
         setStaff(SAMPLE_STAFF);
     }
     useEffect(() => { loadStaffGate(); seedDemoData(); purgeOldReports(); }, []);
@@ -539,7 +514,7 @@ export default function App() {
 /* ================= Login gate (everyone, by name) ================= */
 function LoginGate({ staff, onPick }) {
     const [query, setQuery] = useState("");
-    const list = (staff || []).filter((s) => s.name.toLowerCase().includes(query.trim().toLowerCase()));
+    const list = sortByRank((staff || []).filter((s) => s.name.toLowerCase().includes(query.trim().toLowerCase())));
     return (React.createElement("div", { className: "fade", style: { padding: "40px 20px" } },
         React.createElement("div", { style: { textAlign: "center", marginBottom: 20 } },
             React.createElement("img", { src: LOGO, alt: "Pansy Bistro", style: { width: 92, height: 92, objectFit: "contain", display: "block", margin: "0 auto 8px" } }),
@@ -578,6 +553,13 @@ function StaffWork({ emp, onLogout }) {
     const [showSelf, setShowSelf] = useState(false);
     const [showTraining, setShowTraining] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
+    const [roster, setRoster] = useState(null);
+    useEffect(() => { (async () => { const raw = await safeGet("roster:week", true); if (raw) {
+        try {
+            setRoster(JSON.parse(raw));
+        }
+        catch (_a) { }
+    } })(); }, []);
     const pos = emp ? posById(emp.posId) : null;
     const cp = pos && type ? pos.checkpoints[type] : null;
     const tasks = cp ? cp.items : [];
@@ -601,10 +583,13 @@ function StaffWork({ emp, onLogout }) {
             React.createElement(PrimaryButton, { onClick: logout }, "\u0110\u0103ng xu\u1EA5t"));
     /* ---- pick checkpoint ---- */
     if (step === "cp") {
+        const tIso = todayIso();
+        const todayCode = roster ? ((roster[emp.id] || {})[tIso] || "") : "";
+        const tci = codeInfo(todayCode);
         return (React.createElement("div", { className: "fade", style: { padding: "20px 18px" } },
             React.createElement(TopBar, { title: pos.name, subtitle: `Xin chào ${emp.name}`, onBack: logout }),
             React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" } },
-                React.createElement("button", { onClick: () => setShowTraining(true), style: { ...chipBtn, color: "#fff", background: C.teal, border: "none" } },
+                React.createElement("button", { onClick: () => setShowTraining(true), style: chipBtn },
                     React.createElement(GraduationCap, { size: 14 }),
                     " \u0110\u00E0o t\u1EA1o nghi\u1EC7p v\u1EE5"),
                 React.createElement("button", { onClick: () => setShowMenu(true), style: chipBtn },
@@ -616,6 +601,17 @@ function StaffWork({ emp, onLogout }) {
                 React.createElement("button", { onClick: () => setShowRoster(true), style: chipBtn },
                     React.createElement(CalendarDays, { size: 14 }),
                     " L\u1ECBch l\u00E0m vi\u1EC7c")),
+            React.createElement("div", { style: { background: C.ink, borderRadius: 14, padding: 14, marginBottom: 16, color: "#fff" } },
+                React.createElement("span", { style: { fontSize: 12, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "#9AB8E8" } }, "C\u00F4ng vi\u1EC7c h\u00F4m nay"),
+                React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 8 } },
+                    React.createElement("span", { style: { fontSize: 14, fontWeight: 600 } }, fmtDateVN(tIso)),
+                    tci && tci.working ? (React.createElement("span", { style: { fontSize: 13, fontWeight: 800, background: tci.bg, color: tci.fg, borderRadius: 8, padding: "5px 10px" } },
+                        "Ca ",
+                        tci.code,
+                        " \u00B7 ",
+                        tci.start,
+                        "-",
+                        tci.end)) : tci && tci.leave ? (React.createElement("span", { style: { fontSize: 13, fontWeight: 700, background: "#FBD5D5", color: "#C0392B", borderRadius: 8, padding: "5px 10px" } }, tci.label)) : (React.createElement("span", { style: { fontSize: 13, color: "#9AB8E8" } }, "Ch\u01B0a x\u1EBFp ca h\u00F4m nay")))),
             React.createElement(Label, null, "B\u1EA1n \u0111ang l\u00E0m m\u1ED1c n\u00E0o"),
             React.createElement("div", { style: { display: "grid", gap: 8 } }, availablePhases.map((ph) => {
                 const P = PHASE[ph];
@@ -1328,37 +1324,32 @@ function TabBtn({ active, onClick, Icon, label }) {
 }
 /* ================= Staff registry and performance ================= */
 const SAMPLE_STAFF = [
-    { id: "st_gd", name: "Trần Quốc Bảo", posId: "giamdocvh", accessLevel: "giamdoc" },
-    { id: "st_ql", name: "Nguyễn Văn An", posId: "quanly", accessLevel: "quanly" },
-    { id: "st_bt", name: "Hồ Văn Khang", posId: "bectruong" },
-    { id: "st_bp", name: "Ngô Thị Lan", posId: "becpho" },
-    { id: "st_capt", name: "Lê Hoàng Cường", posId: "tttphucvu", accessLevel: "totruong" },
-    { id: "st_tb", name: "Đỗ Thanh Tùng", posId: "truongbar", accessLevel: "totruong" },
-    { id: "st_pv1", name: "Trần Thị Bình", posId: "nvphucvu" },
-    { id: "st_pv2", name: "Nguyễn Thị Hoa", posId: "nvphucvu" },
-    { id: "st_pv3", name: "Lê Văn Hùng", posId: "nvphucvu" },
-    { id: "st_pv4", name: "Phạm Thị Mai", posId: "nvphucvu" },
-    { id: "st_pv5", name: "Vũ Đình Nam", posId: "nvphucvu" },
-    { id: "st_pv6", name: "Bùi Thị Ngọc", posId: "nvphucvu" },
-    { id: "st_tn1", name: "Phạm Thị Dung", posId: "thungan" },
-    { id: "st_tn2", name: "Trịnh Thu Trang", posId: "thungan" },
-    { id: "st_ho1", name: "Đặng Thu Hà", posId: "hostess" },
-    { id: "st_ho2", name: "Lý Thị Kim", posId: "hostess" },
-    { id: "st_fr1", name: "Nguyễn Văn Lộc", posId: "foodrunner" },
-    { id: "st_fr2", name: "Trần Văn Phát", posId: "foodrunner" },
-    { id: "st_bar1", name: "Hoàng Minh Quân", posId: "nvbar" },
-    { id: "st_bar2", name: "Đinh Thị Sương", posId: "nvbar" },
-    { id: "st_bar3", name: "Phan Văn Tài", posId: "nvbar" },
-    { id: "st_bc1", name: "Võ Minh Đức", posId: "becchinh" },
-    { id: "st_bc2", name: "Nguyễn Văn Sơn", posId: "becchinh" },
-    { id: "st_bc3", name: "Trần Đình Vũ", posId: "becchinh" },
-    { id: "st_pb1", name: "Lê Thị Yến", posId: "phubec" },
-    { id: "st_pb2", name: "Phạm Văn Bình", posId: "phubec" },
-    { id: "st_pb3", name: "Ngô Thị Cúc", posId: "phubec" },
-    { id: "st_vs1", name: "Trần Thị Đào", posId: "vesinh" },
-    { id: "st_vs2", name: "Nguyễn Thị Em", posId: "vesinh" },
-    { id: "st_bv1", name: "Lê Văn Giang", posId: "baove" },
+    { id: "gd", name: "Anh Trung", posId: "giamdocvh", accessLevel: "giamdoc" },
+    { id: "r1", name: "Nguyễn Viết Thế Anh", posId: "quanly", accessLevel: "quanly" },
+    { id: "b1", name: "Nguyễn Nhật Nam", posId: "truongbar", accessLevel: "totruong" },
+    { id: "r2", name: "Lê T Mỹ Quyên", posId: "tttphucvu", accessLevel: "totruong" },
+    { id: "b2", name: "Nguyễn Tấn Tuyển", posId: "nvbar" },
+    { id: "b3", name: "Nguyễn Lê Hoàng Nam", posId: "nvbar" },
+    { id: "b4", name: "Võ Thành Công", posId: "nvbar" },
+    { id: "r3", name: "Nguyễn Quốc Duy", posId: "nvphucvu" },
+    { id: "r4", name: "Lê Quang Vinh", posId: "nvphucvu" },
+    { id: "r5", name: "Võ Hoàng Qúy", posId: "nvphucvu" },
+    { id: "r6", name: "Huỳnh Thành Đô", posId: "nvphucvu" },
+    { id: "r7", name: "Nguyễn Hữu Hơn", posId: "nvphucvu" },
+    { id: "r8", name: "Thảo Trang", posId: "thungan" },
 ];
+const ROLE_RANK = { giamdoc: 0, quanly: 1, totruong: 2, nhanvien: 3 };
+function staffRank(s) {
+    const lv = (s && s.accessLevel) || "nhanvien";
+    let r = ROLE_RANK[lv] != null ? ROLE_RANK[lv] : 3;
+    if (r === 3) {
+        const lead = ["truongbar", "bectruong", "becpho"];
+        if (lead.includes(s.posId))
+            r = 2;
+    }
+    return r;
+}
+function sortByRank(list) { return [...(list || [])].map((s, i) => [s, i]).sort((a, b) => staffRank(a[0]) - staffRank(b[0]) || a[1] - b[1]).map((x) => x[0]); }
 const LEVELS = { giamdoc: "Giám đốc vận hành", quanly: "Quản lý nhà hàng", totruong: "Tổ trưởng", nhanvien: "Nhân viên" };
 const LEVEL_OPTIONS = ["nhanvien", "totruong", "quanly", "giamdoc"];
 const KITCHEN_IDS = ["bectruong", "becpho", "becchinh", "phubec"];
@@ -1639,7 +1630,7 @@ function OverviewBody({ reports, staff, target, onSetTarget, onOpenReport, sched
     const closedKeys = new Set(todays.filter((r) => r.type === "cuoica").map((r) => r.staffId || r.name));
     const todayKey = todayIso();
     const rosterShiftOf = (s) => (roster[s.id] || {})[todayKey] || null;
-    const workingToday = (staff || []).filter((s) => rosterShiftOf(s));
+    const workingToday = (staff || []).filter((s) => { const ci = codeInfo(rosterShiftOf(s)); return ci && ci.working; });
     const totalStaff = workingToday.length;
     const openedN = workingToday.filter((s) => openedKeys.has(s.id) || openedKeys.has(s.name)).length;
     const closedN = workingToday.filter((s) => closedKeys.has(s.id) || closedKeys.has(s.name)).length;
@@ -1682,40 +1673,6 @@ function OverviewBody({ reports, staff, target, onSetTarget, onOpenReport, sched
                 fmt(revenue),
                 " ",
                 React.createElement("span", { style: { fontSize: 16, fontWeight: 600 } }, "\u0111\u1ED3ng"))),
-        single ? (React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 16 } },
-            React.createElement(Stat, { Icon: Sun, label: "\u0110\u00E3 m\u1EDF ca", value: `${openedN}/${totalStaff}` }),
-            React.createElement(Stat, { Icon: Moon, label: "\u0110\u00E3 \u0111\u00F3ng ca", value: `${closedN}/${totalStaff}` }),
-            React.createElement(Stat, { Icon: CircleAlert, label: "V\u1EA5n \u0111\u1EC1", value: openToday.length }))) : (React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 16 } },
-            React.createElement(Stat, { Icon: ClipboardList, label: "B\u00E1o c\u00E1o", value: todays.length }),
-            React.createElement(Stat, { Icon: Award, label: "Ho\u00E0n th\u00E0nh TB", value: avgDone + "%" }),
-            React.createElement(Stat, { Icon: CircleAlert, label: "V\u1EA5n \u0111\u1EC1", value: openToday.length }))),
-        single && (totalStaff === 0 ? (React.createElement("p", { style: { fontSize: 13, color: C.inkSoft, marginBottom: 18 } }, "Ch\u01B0a c\u00F3 nh\u00E2n vi\u00EAn \u0111\u0103ng k\u00FD.")) : (React.createElement(React.Fragment, null,
-            React.createElement(Label, null, "S\u1EB5n s\u00E0ng m\u1EDF ca"),
-            React.createElement("div", { style: { marginBottom: 18 } },
-                missingOpen.length === 0 ? (React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center", background: C.tealSoft, borderRadius: 12, padding: "12px 14px" } },
-                    React.createElement(CircleCheck, { size: 18, color: C.teal }),
-                    React.createElement("span", { style: { fontSize: 13.5, color: C.ink } }, "T\u1EA5t c\u1EA3 nh\u00E2n vi\u00EAn \u0111\u00E3 n\u1ED9p b\u00E1o c\u00E1o \u0111\u1EA7u ca."))) : (React.createElement("div", { style: { background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: "6px 14px" } }, missingOpen.map((s, i) => {
-                    const p = posById(s.posId);
-                    const rs = rosterShiftOf(s);
-                    const openAt = rs ? rs.start : (schedule ? resolveSchedule(s, schedule).open : "");
-                    return (React.createElement("div", { key: s.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < missingOpen.length - 1 ? `1px solid ${C.line}` : "none" } },
-                        React.createElement("span", { style: { fontSize: 14, color: C.ink } },
-                            s.name,
-                            React.createElement("span", { style: { color: C.inkSoft, fontSize: 12 } },
-                                " \u00B7 ",
-                                p ? p.name : "")),
-                        React.createElement("span", { style: { fontSize: 12, color: C.coral, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" } },
-                            React.createElement(Clock, { size: 13 }),
-                            " m\u1EDF l\u00FAc ",
-                            openAt)));
-                }))),
-                openedLate.length > 0 && (React.createElement("div", { style: { background: C.sand, borderRadius: 12, padding: "8px 14px", marginTop: 8 } }, openedLate.map((x) => (React.createElement("div", { key: x.emp.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", fontSize: 13 } },
-                    React.createElement("span", { style: { color: C.ink } }, x.emp.name),
-                    React.createElement("span", { style: { color: C.gold, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 5 } },
-                        React.createElement(Clock, { size: 12 }),
-                        " m\u1EDF tr\u1EC5 ",
-                        x.lateBy,
-                        " ph\u00FAt")))))))))),
         React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
             React.createElement(Label, { nomargin: true }, "V\u1EA5n \u0111\u1EC1 c\u1EA7n x\u1EED l\u00FD"),
             React.createElement("button", { onClick: onOpenInbox, style: chipBtn },
@@ -2032,7 +1989,7 @@ function ComplianceView({ reports, period, setPeriod, reward, onSaveReward, canE
                             : React.createElement("span", { style: { color: C.gold, fontWeight: 600 } }, "\u0110\u1EA1t y\u00EAu c\u1EA7u"))));
         })))));
 }
-/* ================= Work roster (date-based) ================= */
+/* ================= Work roster (code-based) ================= */
 const DOW_SHORT = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 function pad2(n) { return String(n).padStart(2, "0"); }
 function isoOf(d) { const x = new Date(d); return x.getFullYear() + "-" + pad2(x.getMonth() + 1) + "-" + pad2(x.getDate()); }
@@ -2043,64 +2000,58 @@ function dowKeyOf(iso) { return ["SU", "MO", "TU", "WE", "TH", "FR", "SA"][parse
 function weekDates(iso) { const d = parseIso(iso); const back = (d.getDay() + 6) % 7; const mon = addDays(iso, -back); return Array.from({ length: 7 }, (_, i) => addDays(mon, i)); }
 function fmtDateVN(iso) { const d = parseIso(iso); return DOW_SHORT[d.getDay()] + ", " + d.getDate() + "/" + (d.getMonth() + 1); }
 function fmtDM(iso) { const d = parseIso(iso); return d.getDate() + "/" + (d.getMonth() + 1); }
-function isDateKey(k) { return /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(k); }
-const SHIFT_PRESETS = [
-    { label: "Ca sáng", start: "07:00", end: "15:00" },
-    { label: "Ca chiều", start: "15:00", end: "23:00" },
-    { label: "Cả ngày", start: "07:00", end: "23:00" },
-];
-const CYCLE = ["off", "Ca sáng", "Ca chiều", "Cả ngày"];
-function matchShift(sh) {
-    if (!sh)
-        return "off";
-    for (const p of SHIFT_PRESETS)
-        if (p.start === sh.start && p.end === sh.end)
-            return p.label;
-    return "custom";
+/* Shift codes (working) and leave codes, matching the restaurant's paper roster */
+const SHIFT_CODES = {
+    "M": { start: "09:00", end: "17:00" },
+    "M10": { start: "10:00", end: "18:00" },
+    "M11": { start: "11:00", end: "19:00" },
+    "M12": { start: "12:00", end: "20:00" },
+    "M12+": { start: "12:00", end: "20:00", ot: true },
+    "A": { start: "16:00", end: "24:00" },
+    "A6": { start: "18:00", end: "24:00" },
+};
+const LEAVE_CODES = {
+    OFF: "Nghỉ tuần", AL: "Nghỉ phép năm", NB: "Nghỉ bù lễ", P: "Nghỉ phép",
+    O: "Nghỉ ốm hưởng BHXH", TS: "Nghỉ thai sản", H: "Hội họp - Công tác",
+    KP: "Nghỉ không phép", KL: "Nghỉ không lương",
+};
+function codeInfo(code) {
+    if (!code)
+        return null;
+    if (SHIFT_CODES[code]) {
+        const c = SHIFT_CODES[code];
+        const morning = code.charAt(0) === "M";
+        return { code, working: true, start: c.start, end: c.end, ot: !!c.ot, bg: morning ? "#D7F0DD" : "#FCE9C8", fg: morning ? "#1B7A3D" : "#9A6B12" };
+    }
+    if (LEAVE_CODES[code])
+        return { code, working: false, leave: true, label: LEAVE_CODES[code], bg: "#FBD5D5", fg: "#C0392B" };
+    return { code, working: false, bg: "#FFFFFF", fg: "#65676B" };
 }
-function cellStyleFor(lab) {
-    const map = {
-        "off": { txt: "—", bg: C.surface, fg: C.inkSoft },
-        "Ca sáng": { txt: "S", bg: C.tealSoft, fg: C.teal },
-        "Ca chiều": { txt: "C", bg: C.sand, fg: C.gold },
-        "Cả ngày": { txt: "Đ", bg: C.teal, fg: "#fff" },
-        "custom": { txt: "•", bg: C.tealSoft, fg: C.teal },
-    };
-    return map[lab] || map.off;
-}
-/* Migrate older roster formats to date-keyed, materializing 8 weeks so nothing is lost. */
-function migrateRoster(raw, staff, schedule) {
-    const data = raw || {};
-    const ids = Object.keys(data);
-    const alreadyDates = ids.some((id) => data[id] && Object.keys(data[id]).some(isDateKey));
-    if (alreadyDates)
-        return data;
-    const tpl = {};
-    ids.forEach((id) => {
-        const v = data[id];
-        if (!v)
-            return;
-        const emp = (staff || []).find((s) => s.id === id) || { id };
-        if (Array.isArray(v.days)) {
-            const sc = resolveSchedule(emp, schedule);
-            tpl[id] = {};
-            v.days.forEach((dk) => { tpl[id][dk] = { start: sc.open, end: sc.close }; });
-        }
-        else if (typeof v === "object") {
-            tpl[id] = {};
-            Object.keys(v).forEach((dk) => { if (v[dk] && v[dk].start)
-                tpl[id][dk] = v[dk]; });
-        }
-    });
+/* Real weekly schedule (Mon..Sun) from the owner's roster sheet */
+const REAL_SCHEDULE = {
+    b1: ["M10", "M10", "M10", "OFF", "M12", "M10", "M12"],
+    b2: ["M", "M", "M", "A", "A", "M", "OFF"],
+    b3: ["A", "A", "A", "A", "M", "A", "A"],
+    b4: ["A", "A", "A", "M", "OFF", "A", "M"],
+    r1: ["M10", "A", "A", "M", "OFF", "M", "A"],
+    r2: ["A", "OFF", "M11", "A", "M12+", "A", "M12"],
+    r3: ["A6", "OFF", "OFF", "OFF", "OFF", "OFF", "OFF"],
+    r4: ["OFF", "M10", "M", "A6", "M", "M", "M"],
+    r5: ["M12", "A", "OFF", "M10", "M", "A6", "A6"],
+    r6: ["OFF", "M", "M12", "M12", "A", "M12", "M"],
+    r7: ["A", "M12", "A6", "OFF", "A6", "A", "A"],
+    r8: ["M", "A", "A", "A", "OFF", "A", "A"],
+};
+/* Materialize the weekly pattern across nearby weeks so the calendar has data */
+function buildRealRoster() {
     const out = {};
-    const start = todayIso();
-    Object.keys(tpl).forEach((id) => {
+    const thisMon = weekDates(todayIso())[0];
+    Object.keys(REAL_SCHEDULE).forEach((id) => {
         out[id] = {};
-        for (let i = 0; i < 56; i++) {
-            const iso = addDays(start, i);
-            const dk = dowKeyOf(iso);
-            if (tpl[id][dk])
-                out[id][iso] = { ...tpl[id][dk] };
+        for (let w = -1; w <= 7; w++) {
+            const mon = addDays(thisMon, w * 7);
+            REAL_SCHEDULE[id].forEach((code, i) => { if (code)
+                out[id][addDays(mon, i)] = code; });
         }
     });
     return out;
@@ -2108,10 +2059,10 @@ function migrateRoster(raw, staff, schedule) {
 function RosterView({ me, canEdit, scopeIds, onBack }) {
     const [staff, setStaff] = useState(null);
     const [roster, setRoster] = useState({});
-    const [schedule, setSchedule] = useState(null);
     const [date, setDate] = useState(todayIso());
     const [view, setView] = useState(canEdit ? "grid" : "day");
     const [q, setQ] = useState("");
+    const [picker, setPicker] = useState(null);
     const [adding, setAdding] = useState(false);
     const [newName, setNewName] = useState("");
     const scopedPos = scopeIds ? POSITIONS.filter((p) => scopeIds.includes(p.id)) : POSITIONS;
@@ -2127,90 +2078,42 @@ function RosterView({ me, canEdit, scopeIds, onBack }) {
                 catch (_a) { }
             }
             setStaff(st);
-            let sc = null;
-            const scraw = await safeGet("settings:schedule", true);
-            if (scraw) {
-                try {
-                    sc = JSON.parse(scraw);
-                    setSchedule(sc);
-                }
-                catch (_b) { }
-            }
+            let r = null;
             const rraw = await safeGet("roster:week", true);
             if (rraw) {
                 try {
-                    const parsed = JSON.parse(rraw);
-                    const hasData = Object.keys(parsed).length > 0;
-                    const isDates = Object.keys(parsed).some((id) => parsed[id] && Object.keys(parsed[id]).some(isDateKey));
-                    const need = hasData && !isDates;
-                    const r = need ? migrateRoster(parsed, st, sc) : parsed;
-                    setRoster(r);
-                    if (need)
-                        await safeSet("roster:week", JSON.stringify(r), true);
+                    r = JSON.parse(rraw);
                 }
-                catch (_c) {
-                    setRoster({});
-                }
+                catch (_b) { }
             }
-            else {
-                const init = {};
-                const today = todayIso();
-                st.forEach((s) => { const h = resolveSchedule(s, sc); init[s.id] = {}; for (let i = 0; i < 56; i++) {
-                    const iso = addDays(today, i);
-                    if (dowKeyOf(iso) !== "SU")
-                        init[s.id][iso] = { start: h.open || "07:00", end: h.close || "23:00" };
-                } });
-                await safeSet("roster:week", JSON.stringify(init), true);
-                setRoster(init);
+            const isCodeFmt = r && Object.keys(r).some((id) => r[id] && Object.values(r[id]).some((v) => typeof v === "string"));
+            if (!isCodeFmt) {
+                r = buildRealRoster();
+                await safeSet("roster:week", JSON.stringify(r), true);
             }
+            setRoster(r);
         })();
     }, []);
     async function persist(next) { setRoster(next); await safeSet("roster:week", JSON.stringify(next), true); }
-    function shiftOf(empId, iso) { const r = roster[empId]; return r ? r[iso] : null; }
-    function defaultHours(emp) { const h = resolveSchedule(emp, schedule); return { start: h.open || "07:00", end: h.close || "23:00" }; }
-    function toggle(emp) {
-        const r = { ...(roster[emp.id] || {}) };
-        if (r[date])
-            delete r[date];
+    function codeOf(empId, iso) { const m = roster[empId]; return m ? (m[iso] || "") : ""; }
+    function setCode(empId, iso, code) {
+        const m = { ...(roster[empId] || {}) };
+        if (!code)
+            delete m[iso];
         else
-            r[date] = defaultHours(emp);
-        persist({ ...roster, [emp.id]: r });
-    }
-    function setShift(empId, patch) {
-        const r = { ...(roster[empId] || {}) };
-        r[date] = { ...(r[date] || {}), ...patch };
-        persist({ ...roster, [empId]: r });
-    }
-    function applyWeek(empId) {
-        const cur = (roster[empId] || {})[date];
-        if (!cur)
-            return;
-        const r = { ...(roster[empId] || {}) };
-        weekDates(date).forEach((iso) => { r[iso] = { ...cur }; });
-        persist({ ...roster, [empId]: r });
-    }
-    function cycleCell(empId, iso) {
-        const lab = matchShift((roster[empId] || {})[iso]);
-        const next = lab === "custom" ? "off" : CYCLE[(CYCLE.indexOf(lab) + 1) % CYCLE.length];
-        const r = { ...(roster[empId] || {}) };
-        if (next === "off")
-            delete r[iso];
-        else {
-            const ps = SHIFT_PRESETS.find((p) => p.label === next);
-            r[iso] = { start: ps.start, end: ps.end };
-        }
-        persist({ ...roster, [empId]: r });
+            m[iso] = code;
+        persist({ ...roster, [empId]: m });
     }
     function copyPrevWeek() {
         const wk = weekDates(date);
         const next = { ...roster };
         (scopeIds ? (staff || []).filter((s) => scopeIds.includes(s.posId)) : (staff || [])).forEach((s) => {
-            const r = { ...(roster[s.id] || {}) };
+            const m = { ...(roster[s.id] || {}) };
             wk.forEach((iso) => { const prev = (roster[s.id] || {})[addDays(iso, -7)]; if (prev)
-                r[iso] = { ...prev };
+                m[iso] = prev;
             else
-                delete r[iso]; });
-            next[s.id] = r;
+                delete m[iso]; });
+            next[s.id] = m;
         });
         persist(next);
     }
@@ -2222,7 +2125,7 @@ function RosterView({ me, canEdit, scopeIds, onBack }) {
         const list = [...(staff || []), emp];
         setStaff(list);
         await safeSet("staff:list", JSON.stringify(list), true);
-        persist({ ...roster, [emp.id]: { ...(roster[emp.id] || {}), [date]: defaultHours(emp) } });
+        persist({ ...roster, [emp.id]: { ...(roster[emp.id] || {}), [date]: "M" } });
         setNewName("");
         setAdding(false);
     }
@@ -2230,18 +2133,18 @@ function RosterView({ me, canEdit, scopeIds, onBack }) {
         return React.createElement("div", { className: "fade", style: { padding: "20px 18px" } },
             React.createElement(TopBar, { title: "L\u1ECBch l\u00E0m vi\u1EC7c", onBack: onBack }),
             React.createElement("p", { style: { color: C.inkSoft, fontSize: 14, textAlign: "center", padding: "20px 0" } }, "\u0110ang t\u1EA3i l\u1ECBch"));
+    const myStaff = scopeIds ? staff.filter((s) => scopeIds.includes(s.posId)) : staff;
     const week = weekDates(date);
     const myWeek = roster[me.id] || {};
-    const myStaff = scopeIds ? staff.filter((s) => scopeIds.includes(s.posId)) : staff;
-    const working = myStaff.filter((s) => shiftOf(s.id, date));
     const dLabel = fmtDateVN(date);
     const isToday = date === todayIso();
-    const strip = Array.from({ length: 21 }, (_, i) => addDays(todayIso(), i - 1));
     const ql = q.trim().toLowerCase();
     const fstaff = ql ? myStaff.filter((s) => s.name.toLowerCase().includes(ql)) : myStaff;
     const wkLabel = fmtDM(week[0]) + " – " + fmtDM(week[6]);
+    const working = myStaff.filter((s) => { const ci = codeInfo(codeOf(s.id, date)); return ci && ci.working; });
+    const strip = Array.from({ length: 21 }, (_, i) => addDays(todayIso(), i - 1));
     return (React.createElement("div", { className: "fade", style: { padding: "20px 18px 30px" } },
-        React.createElement(TopBar, { title: "L\u1ECBch l\u00E0m vi\u1EC7c", subtitle: canEdit ? (scopeIds ? "Xếp ca cho nhân viên bếp" : "Xếp ca cho nhân viên") : "Lịch chung của quán", onBack: onBack }),
+        React.createElement(TopBar, { title: "L\u1ECBch l\u00E0m vi\u1EC7c", subtitle: canEdit ? (scopeIds ? "Xếp ca cho nhân viên bếp" : "Xếp ca theo ký hiệu") : "Lịch chung của quán", onBack: onBack }),
         canEdit && (React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 16, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 11, padding: 4 } }, [["grid", "Lưới tuần"], ["day", "Theo ngày"]].map(([k, l]) => (React.createElement("button", { key: k, onClick: () => setView(k), style: { flex: 1, padding: "9px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13.5, fontWeight: 700, background: view === k ? C.teal : "transparent", color: view === k ? "#fff" : C.inkSoft } }, l))))),
         canEdit && view === "grid" ? (React.createElement(React.Fragment, null,
             React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } },
@@ -2261,9 +2164,9 @@ function RosterView({ me, canEdit, scopeIds, onBack }) {
                 React.createElement(Search, { size: 16, color: C.inkSoft, style: { position: "absolute", left: 12, top: 12 } }),
                 React.createElement("input", { value: q, onChange: (e) => setQ(e.target.value), placeholder: "T\u00ECm t\u00EAn nh\u00E2n vi\u00EAn", style: { ...inputStyle, paddingLeft: 36 } })),
             React.createElement("div", { style: { overflowX: "auto", border: `1px solid ${C.line}`, borderRadius: 12, marginBottom: 12 } },
-                React.createElement("div", { style: { minWidth: 104 + 7 * 46 } },
+                React.createElement("div", { style: { minWidth: 116 + 7 * 46 } },
                     React.createElement("div", { style: { display: "flex", borderBottom: `1px solid ${C.line}`, background: C.bg } },
-                        React.createElement("div", { style: { width: 104, flexShrink: 0, padding: "8px 10px", fontSize: 11, fontWeight: 700, color: C.inkSoft, position: "sticky", left: 0, background: C.bg, zIndex: 2 } }, "Nh\u00E2n vi\u00EAn"),
+                        React.createElement("div", { style: { width: 116, flexShrink: 0, padding: "8px 10px", fontSize: 11, fontWeight: 700, color: C.inkSoft, position: "sticky", left: 0, background: C.bg, zIndex: 2 } }, "Nh\u00E2n vi\u00EAn"),
                         week.map((iso) => {
                             const d = parseIso(iso);
                             const td = iso === todayIso();
@@ -2280,29 +2183,18 @@ function RosterView({ me, canEdit, scopeIds, onBack }) {
                             rows.map((s) => {
                                 const p = posById(s.posId);
                                 return (React.createElement("div", { key: s.id, style: { display: "flex", borderBottom: `1px solid ${C.line}` } },
-                                    React.createElement("div", { style: { width: 104, flexShrink: 0, padding: "7px 10px", position: "sticky", left: 0, background: C.surface, borderRight: `1px solid ${C.line}`, zIndex: 1 } },
+                                    React.createElement("div", { style: { width: 116, flexShrink: 0, padding: "7px 10px", position: "sticky", left: 0, background: C.surface, borderRight: `1px solid ${C.line}`, zIndex: 1 } },
                                         React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: C.ink, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, s.name),
                                         React.createElement("div", { style: { fontSize: 10, color: C.inkSoft, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, p ? p.name : "")),
                                     week.map((iso) => {
-                                        const lab = matchShift((roster[s.id] || {})[iso]);
-                                        const cs = cellStyleFor(lab);
-                                        return (React.createElement("button", { key: iso, onClick: () => cycleCell(s.id, iso), title: lab === "off" ? "Nghỉ" : lab, style: { width: 46, flexShrink: 0, minHeight: 42, border: "none", borderLeft: `1px solid ${C.line}`, cursor: "pointer", background: cs.bg, color: cs.fg, fontSize: 13, fontWeight: 800, display: "grid", placeItems: "center" } }, cs.txt));
+                                        const code = codeOf(s.id, iso);
+                                        const ci = codeInfo(code);
+                                        return (React.createElement("button", { key: iso, onClick: () => setPicker({ empId: s.id, iso }), title: ci && ci.leave ? ci.label : code, style: { width: 46, flexShrink: 0, minHeight: 44, border: "none", borderLeft: `1px solid ${C.line}`, cursor: "pointer", background: ci ? ci.bg : C.surface, color: ci ? ci.fg : C.inkSoft, fontSize: code.length > 2 ? 10 : 12.5, fontWeight: 800, display: "grid", placeItems: "center" } }, code || "·"));
                                     })));
                             })));
                     }),
                     fstaff.length === 0 && React.createElement("p", { style: { fontSize: 13, color: C.inkSoft, padding: "16px 10px", textAlign: "center" } }, "Kh\u00F4ng t\u00ECm th\u1EA5y nh\u00E2n vi\u00EAn."))),
-            React.createElement("div", { style: { display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12, color: C.inkSoft, marginBottom: 10 } },
-                React.createElement("span", null,
-                    React.createElement("b", { style: { color: C.teal } }, "S"),
-                    " S\u00E1ng"),
-                React.createElement("span", null,
-                    React.createElement("b", { style: { color: C.gold } }, "C"),
-                    " Chi\u1EC1u"),
-                React.createElement("span", null,
-                    React.createElement("b", { style: { color: C.teal } }, "\u0110"),
-                    " C\u1EA3 ng\u00E0y"),
-                React.createElement("span", null, "\u2014 Ngh\u1EC9")),
-            React.createElement("p", { style: { fontSize: 12, color: C.inkSoft, lineHeight: 1.45 } }, "B\u1EA5m v\u00E0o \u00F4 \u0111\u1EC3 xoay ca: Ngh\u1EC9 \u2192 S\u00E1ng \u2192 Chi\u1EC1u \u2192 C\u1EA3 ng\u00E0y. C\u1EA7n gi\u1EDD ri\u00EAng th\u00EC chuy\u1EC3n qua \"Theo ng\u00E0y\". \u00D4 d\u1EA5u \u2022 l\u00E0 ca gi\u1EDD t\u00F9y ch\u1EC9nh."))) : (React.createElement(React.Fragment, null,
+            React.createElement(RosterLegend, null))) : (React.createElement(React.Fragment, null,
             React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
                 React.createElement("button", { onClick: () => setDate(addDays(date, -1)), "aria-label": "Ng\u00E0y tr\u01B0\u1EDBc", style: { width: 38, height: 38, borderRadius: 10, border: `1px solid ${C.line}`, background: C.surface, display: "grid", placeItems: "center", cursor: "pointer", flexShrink: 0 } },
                     React.createElement(ChevronLeft, { size: 18, color: C.ink })),
@@ -2327,24 +2219,25 @@ function RosterView({ me, canEdit, scopeIds, onBack }) {
                     "Tu\u1EA7n c\u1EE7a ",
                     me.name),
                 React.createElement("div", { style: { display: "flex", gap: 5, marginTop: 10 } }, week.map((iso) => {
-                    const sh = myWeek[iso];
+                    const code = myWeek[iso];
+                    const ci = codeInfo(code);
                     const sel = iso === date;
                     const d = parseIso(iso);
-                    return (React.createElement("span", { key: iso, onClick: () => setDate(iso), style: { flex: 1, textAlign: "center", padding: "7px 0", borderRadius: 8, cursor: "pointer", background: sh ? C.teal : "rgba(255,255,255,.1)", color: sh ? "#fff" : "#9AB8E8", outline: sel ? "2px solid #fff" : "none" } },
-                        React.createElement("span", { style: { display: "block", fontSize: 10.5, fontWeight: 700 } },
+                    return (React.createElement("span", { key: iso, onClick: () => setDate(iso), style: { flex: 1, textAlign: "center", padding: "7px 1px", borderRadius: 8, cursor: "pointer", background: ci ? ci.bg : "rgba(255,255,255,.1)", color: ci ? ci.fg : "#9AB8E8", outline: sel ? "2px solid #fff" : "none" } },
+                        React.createElement("span", { style: { display: "block", fontSize: 10, fontWeight: 700 } },
                             DOW_SHORT[d.getDay()],
                             " ",
                             d.getDate()),
-                        React.createElement("span", { style: { display: "block", fontSize: 9.5, fontWeight: 600, marginTop: 2, opacity: sh ? 0.95 : 0.5 } }, sh ? sh.start : "nghỉ")));
+                        React.createElement("span", { style: { display: "block", fontSize: 10.5, fontWeight: 800, marginTop: 2 } }, code || "-")));
                 }))),
             canEdit ? (React.createElement(React.Fragment, null,
                 React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
                     React.createElement(Label, { nomargin: true },
-                        "X\u1EBFp ca ",
+                        "Ca ng\u00E0y ",
                         dLabel,
                         " \u00B7 ",
                         working.length,
-                        " ng\u01B0\u1EDDi"),
+                        " ng\u01B0\u1EDDi l\u00E0m"),
                     React.createElement("button", { onClick: () => setAdding((a) => !a), style: { ...chipBtn, color: "#fff", background: C.teal, border: "none" } },
                         React.createElement(UserPlus, { size: 14 }),
                         " Th\u00EAm ng\u01B0\u1EDDi")),
@@ -2360,32 +2253,18 @@ function RosterView({ me, canEdit, scopeIds, onBack }) {
                         React.createElement("button", { onClick: () => { setAdding(false); setNewName(""); }, style: { ...chipBtn, padding: "11px 14px" } }, "H\u1EE7y")))),
                 React.createElement("div", { style: { display: "grid", gap: 8 } }, myStaff.map((s) => {
                     const p = posById(s.posId);
-                    const sh = shiftOf(s.id, date);
-                    const on = !!sh;
-                    return (React.createElement("div", { key: s.id, style: { background: C.surface, border: `1.5px solid ${on ? C.teal : C.line}`, borderRadius: 13, padding: "11px 13px" } },
-                        React.createElement("button", { onClick: () => toggle(s), style: { width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 12, background: "none", border: "none", cursor: "pointer", padding: 0 } },
-                            React.createElement("span", { style: { width: 24, height: 24, borderRadius: 7, border: `2px solid ${on ? C.teal : C.line}`, background: on ? C.teal : C.surface, display: "grid", placeItems: "center", flexShrink: 0 } }, on && React.createElement(Check, { size: 14, color: "#fff" })),
-                            React.createElement("span", { style: { flex: 1, minWidth: 0 } },
-                                React.createElement("span", { style: { display: "block", fontWeight: 600, fontSize: 14.5 } }, s.name),
-                                React.createElement("span", { style: { display: "block", fontSize: 12, color: C.inkSoft } },
-                                    p ? p.name : "",
-                                    on ? ` · ${sh.start} đến ${sh.end}` : " · nghỉ"))),
-                        on && (React.createElement("div", { className: "fade", style: { marginTop: 11, paddingTop: 11, borderTop: `1px dashed ${C.line}` } },
-                            React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 9 } }, SHIFT_PRESETS.map((ps) => {
-                                const active = sh.start === ps.start && sh.end === ps.end;
-                                return React.createElement("button", { key: ps.label, onClick: () => setShift(s.id, { start: ps.start, end: ps.end }), style: { fontSize: 12, fontWeight: 600, padding: "6px 11px", borderRadius: 99, cursor: "pointer", border: `1px solid ${active ? C.teal : C.line}`, background: active ? C.teal : C.surface, color: active ? "#fff" : C.inkSoft } }, ps.label);
-                            })),
-                            React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
-                                React.createElement("div", { style: { flex: 1 } },
-                                    React.createElement("span", { style: tinyLbl }, "Gi\u1EDD v\u00E0o"),
-                                    React.createElement("input", { type: "time", value: sh.start, onChange: (e) => setShift(s.id, { start: e.target.value }), style: { ...inputStyle, padding: "9px 8px" } })),
-                                React.createElement("div", { style: { flex: 1 } },
-                                    React.createElement("span", { style: tinyLbl }, "Gi\u1EDD ra"),
-                                    React.createElement("input", { type: "time", value: sh.end, onChange: (e) => setShift(s.id, { end: e.target.value }), style: { ...inputStyle, padding: "9px 8px" } }))),
-                            React.createElement("button", { onClick: () => applyWeek(s.id), style: { marginTop: 9, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: C.teal, background: C.tealSoft, border: "none", borderRadius: 9, padding: "7px 11px", cursor: "pointer" } },
-                                React.createElement(CalendarDays, { size: 14 }),
-                                " \u00C1p gi\u1EDD n\u00E0y cho c\u1EA3 tu\u1EA7n")))));
-                })))) : (React.createElement(React.Fragment, null,
+                    const code = codeOf(s.id, date);
+                    const ci = codeInfo(code);
+                    return (React.createElement("button", { key: s.id, onClick: () => setPicker({ empId: s.id, iso: date }), style: { width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 12, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 13, padding: "11px 13px", cursor: "pointer" } },
+                        React.createElement("span", { style: { flex: 1, minWidth: 0 } },
+                            React.createElement("span", { style: { display: "block", fontWeight: 600, fontSize: 14.5 } }, s.name),
+                            React.createElement("span", { style: { display: "block", fontSize: 12, color: C.inkSoft } },
+                                p ? p.name : "",
+                                ci && ci.working ? ` · ${ci.start} đến ${ci.end}` : ci && ci.leave ? ` · ${ci.label}` : "")),
+                        React.createElement("span", { style: { minWidth: 46, textAlign: "center", padding: "6px 10px", borderRadius: 9, fontSize: 13, fontWeight: 800, background: ci ? ci.bg : C.bg, color: ci ? ci.fg : C.inkSoft } }, code || "-")));
+                })),
+                React.createElement("div", { style: { marginTop: 14 } },
+                    React.createElement(RosterLegend, null)))) : (React.createElement(React.Fragment, null,
                 React.createElement(Label, null,
                     "L\u00E0m vi\u1EC7c ",
                     dLabel,
@@ -2394,7 +2273,7 @@ function RosterView({ me, canEdit, scopeIds, onBack }) {
                     ")"),
                 working.length === 0 ? (React.createElement("p", { style: { fontSize: 14, color: C.inkSoft, padding: "12px 0" } }, "Kh\u00F4ng c\u00F3 ai x\u1EBFp ca ng\u00E0y n\u00E0y.")) : (React.createElement("div", { style: { display: "grid", gap: 8 } }, working.map((s) => {
                     const p = posById(s.posId);
-                    const sh = shiftOf(s.id, date);
+                    const ci = codeInfo(codeOf(s.id, date));
                     const mine = s.id === me.id;
                     return (React.createElement("div", { key: s.id, style: { display: "flex", alignItems: "center", gap: 12, background: mine ? C.tealSoft : C.surface, border: `1px solid ${mine ? C.teal : C.line}`, borderRadius: 13, padding: "11px 13px" } },
                         React.createElement("span", { style: { width: 38, height: 38, borderRadius: "50%", background: mine ? C.surface : C.tealSoft, display: "grid", placeItems: "center", flexShrink: 0 } }, p ? React.createElement(p.Icon, { size: 18, color: C.teal }) : React.createElement(UserRound, { size: 18, color: C.teal })),
@@ -2403,11 +2282,53 @@ function RosterView({ me, canEdit, scopeIds, onBack }) {
                                 s.name,
                                 mine ? " · bạn" : ""),
                             React.createElement("span", { style: { display: "block", fontSize: 12.5, color: C.inkSoft } }, p ? p.name : "")),
-                        sh && React.createElement("span", { style: { fontSize: 12.5, color: C.teal, fontWeight: 600, whiteSpace: "nowrap" } },
-                            sh.start,
-                            " \u0111\u1EBFn ",
-                            sh.end)));
-                })))))))));
+                        ci && React.createElement("span", { style: { fontSize: 12.5, color: C.teal, fontWeight: 700, whiteSpace: "nowrap" } },
+                            ci.code,
+                            " \u00B7 ",
+                            ci.start,
+                            "-",
+                            ci.end)));
+                }))))))),
+        picker && (React.createElement("div", { onClick: () => setPicker(null), style: { position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" } },
+            React.createElement("div", { onClick: (e) => e.stopPropagation(), className: "fade", style: { width: "100%", maxWidth: 480, background: C.surface, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: "16px 16px 26px", maxHeight: "78vh", overflowY: "auto" } },
+                React.createElement("p", { style: { fontWeight: 800, fontSize: 16, margin: 0 } }, "Ch\u1ECDn ca"),
+                React.createElement("p", { style: { fontSize: 12.5, color: C.inkSoft, margin: "4px 0 14px" } },
+                    (staff.find((s) => s.id === picker.empId) || {}).name,
+                    " \u00B7 ",
+                    fmtDateVN(picker.iso)),
+                React.createElement("p", { style: tinyLbl }, "Ca l\u00E0m"),
+                React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 } }, Object.keys(SHIFT_CODES).map((code) => {
+                    const ci = codeInfo(code);
+                    return (React.createElement("button", { key: code, onClick: () => { setCode(picker.empId, picker.iso, code); setPicker(null); }, style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 1, padding: "9px 12px", borderRadius: 10, cursor: "pointer", border: "none", background: ci.bg, color: ci.fg, minWidth: 66 } },
+                        React.createElement("b", { style: { fontSize: 14 } }, code),
+                        React.createElement("span", { style: { fontSize: 10 } },
+                            ci.start,
+                            "-",
+                            ci.end)));
+                })),
+                React.createElement("p", { style: tinyLbl }, "Ngh\u1EC9 / Kh\u00E1c"),
+                React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 } }, Object.keys(LEAVE_CODES).map((code) => (React.createElement("button", { key: code, onClick: () => { setCode(picker.empId, picker.iso, code); setPicker(null); }, style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 1, padding: "9px 11px", borderRadius: 10, cursor: "pointer", border: "none", background: "#FBD5D5", color: "#C0392B", minWidth: 60 } },
+                    React.createElement("b", { style: { fontSize: 14 } }, code),
+                    React.createElement("span", { style: { fontSize: 9.5 } }, LEAVE_CODES[code]))))),
+                React.createElement("button", { onClick: () => { setCode(picker.empId, picker.iso, ""); setPicker(null); }, style: { ...chipBtn, width: "100%", justifyContent: "center", padding: "11px" } }, "\u0110\u1EC3 tr\u1ED1ng ng\u00E0y n\u00E0y"))))));
+}
+function RosterLegend() {
+    return (React.createElement("div", { style: { background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px" } },
+        React.createElement("p", { style: { fontSize: 11.5, fontWeight: 800, color: C.inkSoft, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 8 } }, "K\u00FD hi\u1EC7u ca"),
+        React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 } }, Object.keys(SHIFT_CODES).map((code) => {
+            const ci = codeInfo(code);
+            return (React.createElement("span", { key: code, style: { fontSize: 11.5, color: ci.fg, background: ci.bg, borderRadius: 7, padding: "3px 8px", fontWeight: 700 } },
+                code,
+                " ",
+                ci.start,
+                "-",
+                ci.end));
+        })),
+        React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 } }, Object.keys(LEAVE_CODES).map((code) => (React.createElement("span", { key: code, style: { fontSize: 11.5, color: "#C0392B", background: "#FBD5D5", borderRadius: 7, padding: "3px 8px", fontWeight: 700 } },
+            code,
+            ": ",
+            LEAVE_CODES[code])))),
+        React.createElement("p", { style: { fontSize: 11, color: C.inkSoft, marginTop: 9, lineHeight: 1.4 } }, "D\u1EA5u \"+\" (vd M12+) l\u00E0 t\u0103ng ca n\u1EBFu kh\u00E1ch \u0111\u00F4ng. B\u1EA5m v\u00E0o \u00F4 l\u1ECBch \u0111\u1EC3 \u0111\u1ED5i ca.")));
 }
 const tinyLbl = { display: "block", fontSize: 11.5, color: C.inkSoft, marginBottom: 5 };
 /* ================= Training: job description and SOP by position ================= */
@@ -2578,11 +2499,6 @@ const chipBtn = { display: "inline-flex", alignItems: "center", gap: 6, fontSize
 const pill = { fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadius: 99, whiteSpace: "nowrap" };
 const inputStyle = { width: "100%", border: `1px solid ${C.line}`, borderRadius: 11, padding: "12px 13px", fontSize: 14.5, color: C.ink, background: C.surface };
 
-try {
-  createRoot(document.getElementById("root")).render(React.createElement(App));
-} catch (e) {
-  document.getElementById("root").innerHTML = '<div id="boot">Lỗi tải ứng dụng: ' + (e && e.message ? e.message : e) + '<br/>Hãy kiểm tra kết nối mạng rồi tải lại trang.</div>';
-}
-</script>
-</body>
-</html>
+try { createRoot(document.getElementById("root")).render(React.createElement(App)); }
+catch (e) { document.getElementById("root").innerHTML = '<div id="boot">Lỗi tải ứng dụng: ' + (e && e.message ? e.message : e) + '<br/>Kiểm tra mạng rồi tải lại.</div>'; }
+</script></body></html>
