@@ -71,6 +71,10 @@ const POSITIONS = [
         },
     },
     {
+        id: "quanlynhansu", group: "dieuhanh", name: "Quản lý nhân sự", role: "HR Manager", Icon: Users,
+        standards: ["Theo dõi hiệu suất và điểm thưởng của nhân viên", "Tổng hợp công và tính lương cuối tháng"], checkpoints: {},
+    },
+    {
         id: "quanly", group: "dieuhanh", name: "Quản lý nhà hàng", role: "Restaurant Manager", Icon: UserCog,
         standards: ["Đi một vòng kiểm tra chất lượng dịch vụ và tốc độ phục vụ", "Xử lý phản ánh và sự cố khách hàng kịp thời", "Giám sát phối hợp giữa các bộ phận"],
         checkpoints: {
@@ -554,6 +558,7 @@ function StaffWork({ emp, onLogout }) {
     const [showTraining, setShowTraining] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [show86, setShow86] = useState(false);
+    const [showIncident, setShowIncident] = useState(false);
     const [roster, setRoster] = useState(null);
     useEffect(() => { (async () => { const raw = await safeGet("roster:week", true); if (raw) {
         try {
@@ -581,6 +586,10 @@ function StaffWork({ emp, onLogout }) {
         return React.createElement(StaffMenu, { posId: emp.posId, onBack: () => setShowMenu(false) });
     if (show86)
         return React.createElement(EightySixView, { emp: emp, onBack: () => setShow86(false) });
+    if (showIncident)
+        return React.createElement(IncidentReport, { emp: emp, onBack: () => setShowIncident(false), onDone: () => setShowIncident(false) });
+    if (showPoints)
+        return React.createElement(PointsBoard, { me: emp, showMoney: false, onBack: () => setShowPoints(false) });
     if (!pos)
         return React.createElement("div", { style: { padding: 24 } },
             React.createElement(PrimaryButton, { onClick: logout }, "\u0110\u0103ng xu\u1EA5t"));
@@ -601,12 +610,18 @@ function StaffWork({ emp, onLogout }) {
                 React.createElement("button", { onClick: () => setShowSelf(true), style: chipBtn },
                     React.createElement(Award, { size: 14 }),
                     " Hi\u1EC7u su\u1EA5t c\u1EE7a t\u00F4i"),
+                React.createElement("button", { onClick: () => setShowPoints(true), style: chipBtn },
+                    React.createElement(Coins, { size: 14 }),
+                    " B\u1EA3ng x\u1EBFp h\u1EA1ng \u0111i\u1EC3m"),
                 React.createElement("button", { onClick: () => setShowRoster(true), style: chipBtn },
                     React.createElement(CalendarDays, { size: 14 }),
                     " L\u1ECBch l\u00E0m vi\u1EC7c"),
                 React.createElement("button", { onClick: () => setShow86(true), style: chipBtn },
                     React.createElement(Flame, { size: 14 }),
-                    " H\u1EBFt m\u00F3n h\u00F4m nay")),
+                    " H\u1EBFt m\u00F3n h\u00F4m nay"),
+                React.createElement("button", { onClick: () => setShowIncident(true), style: { ...chipBtn, color: "#fff", background: C.coral, border: "none" } },
+                    React.createElement(ShieldAlert, { size: 14 }),
+                    " B\u00E1o s\u1EF1 c\u1ED1")),
             React.createElement("div", { style: { background: C.ink, borderRadius: 14, padding: 14, marginBottom: 16, color: "#fff" } },
                 React.createElement("span", { style: { fontSize: 12, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "#9AB8E8" } }, "C\u00F4ng vi\u1EC7c h\u00F4m nay"),
                 React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 8 } },
@@ -781,6 +796,9 @@ function ManagerFlow({ me, onLogout }) {
     const [reward, setReward] = useState(null);
     const [showInbox, setShowInbox] = useState(false);
     const [show86, setShow86] = useState(false);
+    const [showIncident, setShowIncident] = useState(false);
+    const [showPlans, setShowPlans] = useState(false);
+    const [showPoints, setShowPoints] = useState(false);
     const [scheduleOpen, setScheduleOpen] = useState(false);
     const [showCompliance, setShowCompliance] = useState(false);
     const [showRoster, setShowRoster] = useState(false);
@@ -903,11 +921,16 @@ function ManagerFlow({ me, onLogout }) {
     const scopedStaff = staff ? staff.filter((s) => inScope(s.posId)) : null;
     const range = periodRange(period);
     const rangeReports = scopedReports ? scopedReports.filter((r) => inRange(r.submittedAt, range)) : null;
-    async function saveScores(report, scores) {
-        const updated = { ...report, scores, reviewed: true };
+    async function saveScores(report, scores, feedback) {
+        const updated = { ...report, scores, reviewed: true, feedback: feedback || "" };
         await safeSet(report.id, JSON.stringify(updated), true);
         setReports((rs) => rs.map((r) => (r.id === report.id ? updated : r)));
         setOpenReport(updated);
+    }
+    async function deleteReport(report) {
+        await safeRemove(report.id, true);
+        setReports((rs) => (rs || []).filter((r) => r.id !== report.id));
+        setOpenReport(null);
     }
     async function persistDishes(list) { setDishes(list); await safeSet("menu:dishes", JSON.stringify(list), true); }
     async function saveDish(dish) {
@@ -926,7 +949,7 @@ function ManagerFlow({ me, onLogout }) {
     }
     async function deleteStaff(id) { await persistStaff((staff || []).filter((s) => s.id !== id)); setStaffView(null); }
     if (openReport)
-        return React.createElement(ReportDetail, { report: openReport, onBack: () => setOpenReport(null), onSave: saveScores });
+        return React.createElement(ReportDetail, { report: openReport, onBack: () => setOpenReport(null), onSave: saveScores, onDelete: deleteReport });
     if (caps.menu && dishView && dishView.mode === "detail")
         return React.createElement(DishDetail, { dish: dishView.dish, showCost: caps.showCost, onBack: () => setDishView(null), onEdit: caps.menuEdit ? () => setDishView({ mode: "form", dish: dishView.dish }) : null, onDelete: caps.menuEdit ? () => deleteDish(dishView.dish.id) : null });
     if (caps.menuEdit && dishView && dishView.mode === "form")
@@ -939,6 +962,12 @@ function ManagerFlow({ me, onLogout }) {
         return React.createElement(IssueInbox, { reports: scopedReports, resolved: resolved, onToggle: toggleIssue, onBack: () => setShowInbox(false), onOpenReport: (r) => setOpenReport(r) });
     if (show86)
         return React.createElement(EightySixView, { emp: me, onBack: () => setShow86(false) });
+    if (showIncident)
+        return React.createElement(IncidentReport, { emp: me, onBack: () => setShowIncident(false), onDone: () => { setShowIncident(false); loadReports(); } });
+    if (showPlans)
+        return React.createElement(PlanBoard, { me: me, isDirector: levelForPos(me.posId) === "giamdoc", staff: staff, onBack: () => setShowPlans(false) });
+    if (showPoints)
+        return React.createElement(PointsBoard, { me: me, scopeIds: caps.scopeIds, showMoney: true, onBack: () => setShowPoints(false) });
     if (scheduleOpen && caps.schedule)
         return React.createElement(ScheduleEditor, { initial: schedule, onCancel: () => setScheduleOpen(false), onSave: saveSchedule });
     if (showCompliance)
@@ -949,8 +978,9 @@ function ManagerFlow({ me, onLogout }) {
         return React.createElement(TrainingHub, { scopeIds: caps.scopeIds, onOpen: (posId) => setTraining({ mode: "view", posId }), onBack: () => setTraining(null) });
     if (training && training.mode === "view")
         return React.createElement(TrainingView, { posId: training.posId, editable: caps.staffEdit, onBack: () => setTraining({ mode: "hub" }) });
-    const shown = scopedReports ? scopedReports.filter((r) => filter === "all" || r.type === filter) : null;
-    const reviewed = scopedReports ? scopedReports.filter((r) => r.reviewed).length : 0;
+    const normalReports = scopedReports ? scopedReports.filter((r) => !r.incident) : null;
+    const shown = normalReports ? normalReports.filter((r) => filter === "all" || r.type === filter) : null;
+    const reviewed = normalReports ? normalReports.filter((r) => r.reviewed).length : 0;
     const tabs = [
         { id: "overview", Icon: LayoutDashboard, label: "Tổng quan" },
         { id: "reports", Icon: ClipboardList, label: "Báo cáo" },
@@ -961,11 +991,11 @@ function ManagerFlow({ me, onLogout }) {
     return (React.createElement("div", { className: "fade", style: { padding: "20px 18px" } },
         React.createElement(TopBar, { title: VENUE, subtitle: `${me.name} · ${caps.title}`, onBack: onLogout }),
         React.createElement("div", { style: { display: "flex", gap: 4, marginBottom: 18, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: 4, overflowX: "auto" } }, tabs.map((t) => React.createElement(TabBtn, { key: t.id, active: tab === t.id, onClick: () => setTab(t.id), Icon: t.Icon, label: t.label }))),
-        tab === "overview" ? (React.createElement(OverviewBody, { reports: rangeReports, staff: scopedStaff, target: target, onSetTarget: saveTarget, onOpenReport: (r) => setOpenReport(r), schedule: schedule, resolved: resolved, onToggleIssue: toggleIssue, onOpenInbox: () => setShowInbox(true), onEditSchedule: caps.schedule ? () => setScheduleOpen(true) : null, onOpenCompliance: () => setShowCompliance(true), onOpenRoster: () => setShowRoster(true), onOpenTraining: () => setTraining({ mode: "hub" }), onOpen86: () => setShow86(true), period: period, setPeriod: setPeriod, range: range })) : tab === "reports" ? (React.createElement(React.Fragment, null,
-            scopedReports && scopedReports.length > 0 && (React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 16 } },
-                React.createElement(Stat, { Icon: ClipboardList, label: "B\u00E1o c\u00E1o", value: scopedReports.length }),
+        tab === "overview" ? (React.createElement(OverviewBody, { reports: rangeReports, staff: scopedStaff, target: target, onSetTarget: saveTarget, onOpenReport: (r) => setOpenReport(r), schedule: schedule, resolved: resolved, onToggleIssue: toggleIssue, onOpenInbox: () => setShowInbox(true), onEditSchedule: caps.schedule ? () => setScheduleOpen(true) : null, onOpenCompliance: () => setShowCompliance(true), onOpenRoster: () => setShowRoster(true), onOpenTraining: () => setTraining({ mode: "hub" }), onOpen86: () => setShow86(true), onOpenIncident: () => setShowIncident(true), onOpenPlans: () => setShowPlans(true), onOpenPoints: () => setShowPoints(true), period: period, setPeriod: setPeriod, range: range })) : tab === "reports" ? (React.createElement(React.Fragment, null,
+            normalReports && normalReports.length > 0 && (React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 16 } },
+                React.createElement(Stat, { Icon: ClipboardList, label: "B\u00E1o c\u00E1o", value: normalReports.length }),
                 React.createElement(Stat, { Icon: CircleCheck, label: "\u0110\u00E3 ch\u1EA5m", value: reviewed }),
-                React.createElement(Stat, { Icon: BarChart3, label: "Trung b\u00ECnh", value: scopedReports.length ? Math.round(scopedReports.reduce((s, r) => s + r.pct, 0) / scopedReports.length) + "%" : "0%" }))),
+                React.createElement(Stat, { Icon: BarChart3, label: "Trung b\u00ECnh", value: normalReports.length ? Math.round(normalReports.reduce((s, r) => s + (r.pct || 0), 0) / normalReports.length) + "%" : "0%" }))),
             React.createElement("div", { style: { display: "flex", gap: 7, marginBottom: 14, overflowX: "auto", paddingBottom: 2 } },
                 React.createElement(FilterChip, { active: filter === "all", onClick: () => setFilter("all"), label: "T\u1EA5t c\u1EA3" }),
                 PHASE_ORDER.map((ph) => React.createElement(FilterChip, { key: ph, active: filter === ph, onClick: () => setFilter(ph), label: PHASE[ph].label }))),
@@ -1022,8 +1052,12 @@ function ReportCard({ report, onClick }) {
                 " ",
                 avg.toFixed(1)))));
 }
-function ReportDetail({ report, onBack, onSave }) {
+function ReportDetail({ report, onBack, onSave, onDelete }) {
+    if (report.incident)
+        return React.createElement(IncidentDetail, { report: report, onBack: onBack, onDelete: onDelete });
     const [scores, setScores] = useState(report.scores || {});
+    const [feedback, setFeedback] = useState(report.feedback || "");
+    const [del, setDel] = useState(false);
     const cp = cpOf(report.posId, report.type);
     const tasks = cp ? cp.items : [];
     const fields = fieldsOf(cp);
@@ -1061,16 +1095,67 @@ function ReportDetail({ report, onBack, onSave }) {
         React.createElement("div", { style: { background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: "6px 14px", marginBottom: 18 } }, RUBRIC.map((r, i) => (React.createElement("div", { key: r.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: i < RUBRIC.length - 1 ? `1px solid ${C.line}` : "none" } },
             React.createElement("span", { style: { fontSize: 14, color: C.ink } }, r.label),
             React.createElement(StarPicker, { value: scores[r.id] || 0, onPick: (v) => setScores({ ...scores, [r.id]: v }) }))))),
-        React.createElement(PrimaryButton, { onClick: () => onSave(report, scores) },
+        React.createElement(Label, null, "G\u00F3p \u00FD cho nh\u00E2n vi\u00EAn"),
+        React.createElement("textarea", { value: feedback, onChange: (e) => setFeedback(e.target.value), placeholder: "Nh\u1EADn x\u00E9t, \u0111i\u1EC1u c\u1EA7n c\u1EA3i thi\u1EC7n, l\u1EDDi khen cho nh\u00E2n vi\u00EAn...", rows: 3, style: { ...inputStyle, minHeight: 74, resize: "vertical", marginBottom: 18 } }),
+        React.createElement(PrimaryButton, { onClick: () => onSave(report, scores, feedback) },
             React.createElement(Check, { size: 17 }),
             " ",
-            report.reviewed ? "Cập nhật điểm" : "Lưu điểm và duyệt")));
+            report.reviewed ? "Cập nhật điểm và góp ý" : "Lưu điểm và duyệt"),
+        onDelete && (del ? (React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 12 } },
+            React.createElement("button", { onClick: () => onDelete(report), style: { flex: 1, background: C.coral, color: "#fff", border: "none", borderRadius: 12, padding: "12px", fontWeight: 700, cursor: "pointer" } }, "X\u00E1c nh\u1EADn x\u00F3a b\u00E1o c\u00E1o"),
+            React.createElement("button", { onClick: () => setDel(false), style: { ...chipBtn, padding: "12px 14px" } }, "H\u1EE7y"))) : (React.createElement("button", { onClick: () => setDel(true), style: { ...ghostBtn, color: C.coral } },
+            React.createElement(Trash2, { size: 14, style: { verticalAlign: "-2px" } }),
+            " X\u00F3a b\u00E1o c\u00E1o nh\u1EA7m/tr\u00F9ng")))));
 }
 function StarPicker({ value, onPick }) {
     return (React.createElement("div", { style: { display: "flex", gap: 3 } }, [1, 2, 3, 4, 5].map((n) => (React.createElement("button", { key: n, onClick: () => onPick(n), "aria-label": `${n} sao`, style: { background: "none", border: "none", cursor: "pointer", padding: 1, lineHeight: 0 } },
         React.createElement(Star, { size: 20, color: C.gold, fill: n <= value ? C.gold : "transparent" }))))));
 }
 function avgScore(scores) { const vals = RUBRIC.map((r) => scores[r.id] || 0).filter((v) => v > 0); return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0; }
+/* ===== Điểm thưởng/phạt theo báo cáo cuối ca + sao ===== */
+const POINT_RATE_DEFAULT = 10000;
+function pointsForReport(r) {
+    if (!r || r.incident || r.type !== "cuoica")
+        return null;
+    if (!r.scores)
+        return 0;
+    const star = Math.round(avgScore(r.scores));
+    return star >= 5 ? 2 : star === 4 ? 1 : star === 3 ? 0 : -1;
+}
+function monthRangeOf(anchorIso) { const d = parseIso(anchorIso); const y = d.getFullYear(), m = d.getMonth(); return { first: isoOf(new Date(y, m, 1)), last: isoOf(new Date(y, m + 1, 0)), y, m }; }
+function staffMonthPoints(emp, reports, roster, anchorIso) {
+    const mr = monthRangeOf(anchorIso);
+    const today = todayIso();
+    const dayIso = (r) => { try {
+        return isoOf(new Date(r.submittedAt));
+    }
+    catch (_a) {
+        return "";
+    } };
+    const mine = (reports || []).filter((r) => !r.incident && r.type === "cuoica" && ((r.staffId && r.staffId === emp.id) || (!r.staffId && r.name === emp.name)));
+    const inMonth = mine.filter((r) => { const d = dayIso(r); return d >= mr.first && d <= mr.last; });
+    const reported = new Set(inMonth.map(dayIso));
+    let pts = 0, good = 0, bad = 0, miss = 0, pending = 0;
+    inMonth.forEach((r) => { const p = pointsForReport(r); pts += p; if (!r.scores)
+        pending++;
+    else if (p > 0)
+        good++;
+    else if (p < 0)
+        bad++; });
+    const rmap = (roster && roster[emp.id]) || {};
+    let dd = mr.first;
+    while (dd <= mr.last) {
+        if (dd < today) {
+            const ci = codeInfo(rmap[dd]);
+            if (ci && ci.working && !reported.has(dd)) {
+                pts -= 2;
+                miss++;
+            }
+        }
+        dd = addDays(dd, 1);
+    }
+    return { pts, good, bad, miss, pending };
+}
 const RECON_THRESHOLD = 50000;
 function ReconField({ eos, setEos }) {
     function setVal(k, v) {
@@ -1431,19 +1516,21 @@ const SAMPLE_STAFF = [
     { id: "r7", name: "Nguyễn Hữu Hơn", posId: "nvphucvu" },
     { id: "r8", name: "Thảo Trang", posId: "thungan" },
 ];
-const ROLE_RANK = { giamdoc: 0, quanly: 1, beptruong: 2, totruong: 2, nhanvien: 3 };
+const ROLE_RANK = { giamdoc: 0, quanly: 1, nhansu: 1, beptruong: 2, totruong: 3, nhanvien: 4 };
 function staffRank(s) {
     const r = ROLE_RANK[levelForPos(s && s.posId)];
     return r != null ? r : 3;
 }
 function sortByRank(list) { return [...(list || [])].map((s, i) => [s, i]).sort((a, b) => staffRank(a[0]) - staffRank(b[0]) || a[1] - b[1]).map((x) => x[0]); }
-const LEVELS = { giamdoc: "Giám đốc vận hành", quanly: "Quản lý nhà hàng", beptruong: "Quản lý bếp", totruong: "Tổ trưởng", nhanvien: "Nhân viên" };
+const LEVELS = { giamdoc: "Giám đốc vận hành", quanly: "Quản lý nhà hàng", nhansu: "Quản lý nhân sự", beptruong: "Quản lý bếp", totruong: "Tổ trưởng", nhanvien: "Nhân viên" };
 /* Quyền suy trực tiếp từ chức danh (vị trí) — không chọn tay nữa */
 function levelForPos(posId) {
     if (posId === "giamdocvh")
         return "giamdoc";
     if (posId === "quanly")
         return "quanly";
+    if (posId === "quanlynhansu")
+        return "nhansu";
     if (posId === "bectruong" || posId === "becpho")
         return "beptruong";
     if (posId === "tttphucvu" || posId === "truongbar")
@@ -1461,12 +1548,14 @@ function capsFor(emp) {
         return { manage: true, menu: true, menuEdit: true, showCost: true, staffEdit: true, schedule: true, rewardEdit: true, rosterEdit: true, scopeIds: null, menuKind: "all", title: LEVELS.giamdoc };
     if (lv === "quanly")
         return { manage: true, menu: true, menuEdit: true, showCost: true, staffEdit: true, schedule: true, rewardEdit: false, rosterEdit: true, scopeIds: null, menuKind: "all", title: LEVELS.quanly };
+    if (lv === "nhansu")
+        return { manage: true, menu: false, menuEdit: false, showCost: false, staffEdit: true, schedule: false, rewardEdit: false, rosterEdit: false, scopeIds: null, menuKind: "all", title: LEVELS.nhansu };
     if (lv === "beptruong")
         return { manage: true, menu: true, menuEdit: false, showCost: true, staffEdit: false, schedule: false, rewardEdit: false, rosterEdit: true, scopeIds: KITCHEN_IDS, menuKind: "food", title: (posById(emp.posId) || {}).name || "Quản lý bếp" };
     return { manage: false, title: LEVELS[lv] || LEVELS.nhanvien };
 }
 function statsFor(reports, emp) {
-    const list = (reports || []).filter((r) => (r.staffId && r.staffId === emp.id) || (!r.staffId && r.name === emp.name));
+    const list = (reports || []).filter((r) => !r.incident && ((r.staffId && r.staffId === emp.id) || (!r.staffId && r.name === emp.name)));
     const count = list.length;
     const avgPct = count ? Math.round(list.reduce((s, r) => s + (r.pct || 0), 0) / count) : 0;
     const scored = list.filter((r) => r.scores);
@@ -1711,7 +1800,7 @@ function PeriodPicker({ period, setPeriod }) {
                 React.createElement("span", { style: { display: "block", fontSize: 11.5, color: C.inkSoft, marginBottom: 5 } }, "\u0110\u1EBFn ng\u00E0y"),
                 React.createElement("input", { type: "date", value: period.to || "", onChange: (e) => setPeriod({ id: "custom", from: period.from || "", to: e.target.value }), style: inputStyle }))))));
 }
-function OverviewBody({ reports, staff, target, onSetTarget, onOpenReport, schedule, resolved, onToggleIssue, onOpenInbox, onEditSchedule, onOpenCompliance, onOpenRoster, onOpenTraining, onOpen86, period, setPeriod, range }) {
+function OverviewBody({ reports, staff, target, onSetTarget, onOpenReport, schedule, resolved, onToggleIssue, onOpenInbox, onEditSchedule, onOpenCompliance, onOpenRoster, onOpenTraining, onOpen86, onOpenIncident, onOpenPlans, onOpenPoints, period, setPeriod, range }) {
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(String(target || ""));
     const [roster, setRoster] = useState({});
@@ -1741,6 +1830,10 @@ function OverviewBody({ reports, staff, target, onSetTarget, onOpenReport, sched
     const avgDone = todays.length ? Math.round(todays.reduce((s, r) => s + (r.pct || 0), 0) / todays.length) : 0;
     const issues = [];
     todays.forEach((r) => {
+        if (r.incident && r.eos && r.eos.suco && r.eos.suco.trim()) {
+            issues.push({ report: r, label: "Báo sự cố", value: r.eos.suco, key: r.id + "::incident" });
+            return;
+        }
         const fs = fieldsOf(cpOf(r.posId, r.type));
         fs.forEach((f) => { if (f.flag && r.eos && r.eos[f.k] && r.eos[f.k].trim() && !/^không$/i.test(r.eos[f.k].trim()))
             issues.push({ report: r, label: f.label, value: r.eos[f.k], key: r.id + "::" + f.k }); });
@@ -1761,12 +1854,21 @@ function OverviewBody({ reports, staff, target, onSetTarget, onOpenReport, sched
             React.createElement("button", { onClick: onOpenRoster, style: chipBtn },
                 React.createElement(CalendarDays, { size: 13 }),
                 " L\u1ECBch l\u00E0m vi\u1EC7c"),
+            React.createElement("button", { onClick: onOpenPlans, style: chipBtn },
+                React.createElement(Target, { size: 13 }),
+                " K\u1EBF ho\u1EA1ch"),
+            React.createElement("button", { onClick: onOpenPoints, style: chipBtn },
+                React.createElement(Coins, { size: 13 }),
+                " \u0110i\u1EC3m th\u01B0\u1EDFng"),
             React.createElement("button", { onClick: onOpenTraining, style: chipBtn },
                 React.createElement(GraduationCap, { size: 13 }),
                 " \u0110\u00E0o t\u1EA1o"),
             React.createElement("button", { onClick: onOpen86, style: chipBtn },
                 React.createElement(Flame, { size: 13 }),
                 " H\u1EBFt m\u00F3n"),
+            React.createElement("button", { onClick: onOpenIncident, style: { ...chipBtn, color: "#fff", background: C.coral, border: "none" } },
+                React.createElement(ShieldAlert, { size: 13 }),
+                " B\u00E1o s\u1EF1 c\u1ED1"),
             onEditSchedule && React.createElement("button", { onClick: onEditSchedule, style: chipBtn },
                 React.createElement(Clock, { size: 13 }),
                 " Gi\u1EDD ca")),
@@ -1814,6 +1916,10 @@ function IssueInbox({ reports, resolved, onToggle, onBack, onOpenReport }) {
     const [filter, setFilter] = useState("open");
     const all = [];
     (reports || []).forEach((r) => {
+        if (r.incident && r.eos && r.eos.suco && r.eos.suco.trim()) {
+            all.push({ report: r, label: "Báo sự cố", value: r.eos.suco, key: r.id + "::incident" });
+            return;
+        }
         fieldsOf(cpOf(r.posId, r.type)).forEach((f) => {
             if (f.flag && r.eos && r.eos[f.k] && r.eos[f.k].trim() && !/^không$/i.test(r.eos[f.k].trim()))
                 all.push({ report: r, label: f.label, value: r.eos[f.k], key: r.id + "::" + f.k });
@@ -1893,6 +1999,298 @@ function ScheduleEditor({ initial, onCancel, onSave }) {
             " L\u01B0u gi\u1EDD ca")));
 }
 /* Staff browses the menu without cost */
+function PointsBoard({ me, scopeIds, showMoney = true, onBack }) {
+    const [reports, setReports] = useState(null);
+    const [roster, setRoster] = useState({});
+    const [staff, setStaff] = useState([]);
+    const [rate, setRate] = useState(POINT_RATE_DEFAULT);
+    const [anchor, setAnchor] = useState(todayIso());
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState("");
+    const isDirector = levelForPos(me.posId) === "giamdoc";
+    useEffect(() => {
+        (async () => {
+            const res = await safeList("report:", true);
+            const keys = (res && res.keys) || [];
+            const items = [];
+            for (const k of keys) {
+                const v = await safeGet(k, true);
+                if (v) {
+                    try {
+                        items.push(JSON.parse(v));
+                    }
+                    catch (_a) { }
+                }
+            }
+            setReports(items);
+            const sraw = await safeGet("staff:list", true);
+            if (sraw) {
+                try {
+                    setStaff(JSON.parse(sraw));
+                }
+                catch (_b) { }
+            }
+            const rraw = await safeGet("roster:week", true);
+            if (rraw) {
+                try {
+                    setRoster(JSON.parse(rraw));
+                }
+                catch (_c) { }
+            }
+            const prw = await safeGet("settings:point_rate", true);
+            const n = Number(prw);
+            if (n)
+                setRate(n);
+        })();
+    }, []);
+    async function saveRate(n) { setRate(n); setEditing(false); await safeSet("settings:point_rate", String(n), true); }
+    if (reports === null)
+        return React.createElement("div", { className: "fade", style: { padding: "20px 18px" } },
+            React.createElement(TopBar, { title: "\u0110i\u1EC3m th\u01B0\u1EDFng", onBack: onBack }),
+            React.createElement("p", { style: { color: C.inkSoft, fontSize: 14, textAlign: "center", padding: "20px 0" } }, "\u0110ang t\u00EDnh \u0111i\u1EC3m"));
+    const mr = monthRangeOf(anchor);
+    const pool = scopeIds ? staff.filter((s) => scopeIds.includes(s.posId)) : staff;
+    const rows = pool.map((s) => ({ emp: s, ...staffMonthPoints(s, reports, roster, anchor) })).sort((a, b) => b.pts - a.pts);
+    const totalReward = rows.reduce((sum, x) => sum + (x.pts > 0 ? x.pts * rate : 0), 0);
+    return (React.createElement("div", { className: "fade", style: { padding: "20px 18px 30px" } },
+        React.createElement(TopBar, { title: "\u0110i\u1EC3m th\u01B0\u1EDFng nh\u00E2n vi\u00EAn", subtitle: "X\u1EBFp h\u1EA1ng theo th\u00E1ng", onBack: onBack }),
+        React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
+            React.createElement("button", { onClick: () => setAnchor(isoOf(new Date(mr.y, mr.m - 1, 1))), "aria-label": "Th\u00E1ng tr\u01B0\u1EDBc", style: { width: 36, height: 36, borderRadius: 10, border: `1px solid ${C.line}`, background: C.surface, display: "grid", placeItems: "center", cursor: "pointer", flexShrink: 0 } },
+                React.createElement(ChevronLeft, { size: 18, color: C.ink })),
+            React.createElement("span", { style: { flex: 1, textAlign: "center", fontSize: 15, fontWeight: 700, color: C.ink } },
+                "Th\u00E1ng ",
+                mr.m + 1,
+                "/",
+                mr.y),
+            React.createElement("button", { onClick: () => setAnchor(isoOf(new Date(mr.y, mr.m + 1, 1))), "aria-label": "Th\u00E1ng sau", style: { width: 36, height: 36, borderRadius: 10, border: `1px solid ${C.line}`, background: C.surface, display: "grid", placeItems: "center", cursor: "pointer", flexShrink: 0 } },
+                React.createElement(ChevronRight, { size: 18, color: C.ink }))),
+        showMoney && React.createElement("div", { style: { background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 16 } },
+            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+                React.createElement("span", { style: { fontSize: 13.5, color: C.ink } },
+                    "Quy \u0111\u1ED5i: ",
+                    React.createElement("b", { style: { color: C.teal } },
+                        fmt(rate),
+                        "\u0111"),
+                    " / \u0111i\u1EC3m"),
+                isDirector && !editing && React.createElement("button", { onClick: () => { setDraft(String(rate)); setEditing(true); }, style: chipBtn },
+                    React.createElement(Pencil, { size: 13 }),
+                    " \u0110\u1ED5i m\u1EE9c")),
+            isDirector && editing && (React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 10 } },
+                React.createElement("input", { value: draft, inputMode: "numeric", onChange: (e) => setDraft(e.target.value), style: inputStyle }),
+                React.createElement("button", { onClick: () => saveRate(moneyNum(draft) || POINT_RATE_DEFAULT), style: { background: C.teal, color: "#fff", border: "none", borderRadius: 9, padding: "0 16px", fontWeight: 700, cursor: "pointer" } }, "L\u01B0u"))),
+            React.createElement("p", { style: { fontSize: 12, color: C.inkSoft, marginTop: 8, lineHeight: 1.4 } },
+                "5\u2605 +2 \u00B7 4\u2605 +1 \u00B7 3\u2605 0 \u00B7 d\u01B0\u1EDBi 3\u2605 \u22121 \u00B7 c\u00F3 ca kh\u00F4ng b\u00E1o c\u00E1o \u22122. T\u1ED5ng th\u01B0\u1EDFng d\u01B0\u01A1ng th\u00E1ng n\u00E0y ~",
+                fmt(totalReward),
+                "\u0111.")),
+        !showMoney && React.createElement("p", { style: { fontSize: 12, color: C.inkSoft, marginBottom: 14, lineHeight: 1.45 } }, "C\u00E1ch t\u00EDnh \u0111i\u1EC3m: 5\u2605 +2 \u00B7 4\u2605 +1 \u00B7 3\u2605 0 \u00B7 d\u01B0\u1EDBi 3\u2605 \u22121 \u00B7 c\u00F3 ca kh\u00F4ng b\u00E1o c\u00E1o \u22122. \u0110\u1EA1t 5\u2605 cu\u1ED1i ca \u0111\u1EC3 l\u00EAn h\u1EA1ng."),
+        React.createElement(Label, null,
+            "X\u1EBFp h\u1EA1ng th\u00E1ng ",
+            mr.m + 1),
+        React.createElement("div", { style: { display: "grid", gap: 10 } },
+            rows.map((x, i) => {
+                const p = posById(x.emp.posId);
+                const money = x.pts * rate;
+                const col = x.pts > 0 ? C.teal : x.pts < 0 ? C.coral : C.inkSoft;
+                return (React.createElement("div", { key: x.emp.id, style: { background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 13 } },
+                    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 11 } },
+                        React.createElement("span", { style: { width: 26, height: 26, borderRadius: 8, background: i < 3 ? C.gold : C.bg, color: i < 3 ? "#fff" : C.inkSoft, display: "grid", placeItems: "center", fontSize: 13, fontWeight: 800, flexShrink: 0 } }, i + 1),
+                        React.createElement("span", { style: { flex: 1, minWidth: 0 } },
+                            React.createElement("span", { style: { display: "block", fontWeight: 700, fontSize: 14.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, x.emp.name),
+                            React.createElement("span", { style: { display: "block", fontSize: 12, color: C.inkSoft } }, p ? p.name : "")),
+                        React.createElement("span", { style: { textAlign: "right" } },
+                            React.createElement("span", { style: { display: "block", fontSize: 16, fontWeight: 800, color: col } },
+                                x.pts > 0 ? "+" : "",
+                                x.pts,
+                                " \u0111i\u1EC3m"),
+                            showMoney && React.createElement("span", { style: { display: "block", fontSize: 12.5, fontWeight: 600, color: col } },
+                                money >= 0 ? "+" : "",
+                                fmt(money),
+                                "\u0111"))),
+                    React.createElement("p", { style: { fontSize: 11.5, color: C.inkSoft, marginTop: 8 } },
+                        x.good,
+                        " l\u1EA7n \u0111\u1EA1t \u0111i\u1EC3m \u00B7 ",
+                        x.bad,
+                        " l\u1EA7n d\u01B0\u1EDBi chu\u1EA9n \u00B7 ",
+                        x.miss,
+                        " ng\u00E0y kh\u00F4ng b\u00E1o c\u00E1o",
+                        x.pending ? " · " + x.pending + " chờ chấm" : "")));
+            }),
+            rows.length === 0 && React.createElement("p", { style: { fontSize: 13, color: C.inkSoft, textAlign: "center", padding: "20px 0" } }, "Ch\u01B0a c\u00F3 d\u1EEF li\u1EC7u."))));
+}
+const PLAN_CATS = ["Truyền thông", "Quảng cáo", "Truyền thông nội bộ", "Đào tạo nội bộ", "Khác"];
+const PLAN_STATUS = ["todo", "doing", "done"];
+const PLAN_STATUS_LABEL = { todo: "Chưa làm", doing: "Đang làm", done: "Hoàn thành" };
+function planStatusStyle(s) {
+    if (s === "done")
+        return { bg: "#D7F0DD", fg: "#1B7A3D" };
+    if (s === "doing")
+        return { bg: "#E7F0FF", fg: "#1877F2" };
+    return { bg: C.sand, fg: C.gold };
+}
+function PlanForm({ initial, staff, isDirector, selfId, onCancel, onSave }) {
+    const [t, setT] = useState(initial.title || "");
+    const [cat, setCat] = useState(initial.cat || PLAN_CATS[0]);
+    const [assignee, setAssignee] = useState(initial.assigneeId || (isDirector ? ((staff && staff[0] && staff[0].id) || "") : selfId));
+    const [desc, setDesc] = useState(initial.desc || "");
+    const [due, setDue] = useState(initial.due || "");
+    const tl = { display: "block", fontSize: 12, color: C.inkSoft, marginBottom: 5 };
+    return (React.createElement("div", { className: "fade", style: { padding: "20px 18px 30px" } },
+        React.createElement(TopBar, { title: initial.title ? "Sửa kế hoạch" : "Giao việc mới", onBack: onCancel }),
+        React.createElement("span", { style: tl }, "T\u00EAn c\u00F4ng vi\u1EC7c / k\u1EBF ho\u1EA1ch"),
+        React.createElement("input", { value: t, onChange: (e) => setT(e.target.value), placeholder: "VD: K\u1EBF ho\u1EA1ch truy\u1EC1n th\u00F4ng th\u00E1ng 7", style: { ...inputStyle, marginBottom: 12 } }),
+        React.createElement("span", { style: tl }, "Lo\u1EA1i"),
+        React.createElement("select", { value: cat, onChange: (e) => setCat(e.target.value), style: { ...inputStyle, marginBottom: 12 } }, PLAN_CATS.map((c) => React.createElement("option", { key: c, value: c }, c))),
+        isDirector ? (React.createElement(React.Fragment, null,
+            React.createElement("span", { style: tl }, "Giao cho"),
+            React.createElement("select", { value: assignee, onChange: (e) => setAssignee(e.target.value), style: { ...inputStyle, marginBottom: 12 } }, (staff || []).map((sx) => React.createElement("option", { key: sx.id, value: sx.id }, sx.name))))) : (React.createElement("div", { style: { background: C.tealSoft, borderRadius: 10, padding: "9px 12px", marginBottom: 12, fontSize: 13, color: C.ink } }, "Vi\u1EC7c n\u00E0y c\u1EE7a ch\u00EDnh b\u1EA1n.")),
+        React.createElement("span", { style: tl }, "H\u1EA1n ho\u00E0n th\u00E0nh"),
+        React.createElement("input", { type: "date", value: due, onChange: (e) => setDue(e.target.value), style: { ...inputStyle, marginBottom: 12 } }),
+        React.createElement("span", { style: tl }, "M\u00F4 t\u1EA3 / y\u00EAu c\u1EA7u"),
+        React.createElement("textarea", { value: desc, onChange: (e) => setDesc(e.target.value), rows: 4, placeholder: "M\u1EE5c ti\u00EAu, \u0111\u1EA7u vi\u1EC7c, k\u1EBFt qu\u1EA3 mong \u0111\u1EE3i...", style: { ...inputStyle, minHeight: 90, resize: "vertical", marginBottom: 18 } }),
+        React.createElement(PrimaryButton, { disabled: !t.trim(), onClick: () => onSave({ ...initial, title: t.trim(), cat, assigneeId: isDirector ? assignee : selfId, desc, due }) },
+            React.createElement(Check, { size: 17 }),
+            " L\u01B0u k\u1EBF ho\u1EA1ch")));
+}
+function PlanBoard({ me, isDirector, staff, onBack }) {
+    const [plans, setPlans] = useState(null);
+    const [form, setForm] = useState(null);
+    useEffect(() => { (async () => { const raw = await safeGet("plans:list", true); let arr = []; if (raw) {
+        try {
+            arr = JSON.parse(raw);
+        }
+        catch (_a) { }
+    } setPlans(arr); })(); }, []);
+    async function persist(arr) { setPlans(arr); await safeSet("plans:list", JSON.stringify(arr), true); }
+    function save(p) { const arr = plans || []; const next = arr.some((x) => x.id === p.id) ? arr.map((x) => x.id === p.id ? p : x) : [...arr, p]; persist(next); setForm(null); }
+    function del(id) { persist((plans || []).filter((x) => x.id !== id)); }
+    function setStatus(id, status) { persist((plans || []).map((x) => x.id === id ? { ...x, status } : x)); }
+    if (plans === null)
+        return React.createElement("div", { className: "fade", style: { padding: "20px 18px" } },
+            React.createElement(TopBar, { title: "K\u1EBF ho\u1EA1ch c\u00F4ng vi\u1EC7c", onBack: onBack }),
+            React.createElement("p", { style: { color: C.inkSoft, fontSize: 14, textAlign: "center", padding: "20px 0" } }, "\u0110ang t\u1EA3i"));
+    if (form)
+        return React.createElement(PlanForm, { initial: form, staff: staff, isDirector: isDirector, selfId: me.id, onCancel: () => setForm(null), onSave: save });
+    const visible = isDirector ? plans : plans.filter((p) => p.assigneeId === me.id);
+    const done = visible.filter((p) => p.status === "done").length;
+    return (React.createElement("div", { className: "fade", style: { padding: "20px 18px 30px" } },
+        React.createElement(TopBar, { title: "K\u1EBF ho\u1EA1ch c\u00F4ng vi\u1EC7c", subtitle: isDirector ? "Giao việc và theo dõi" : "Việc được giao cho bạn", onBack: onBack }),
+        React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 14 } },
+            React.createElement(Stat, { Icon: Target, label: "T\u1ED5ng k\u1EBF ho\u1EA1ch", value: visible.length }),
+            React.createElement(Stat, { Icon: CheckCheck, label: "Ho\u00E0n th\u00E0nh", value: done + "/" + visible.length })),
+        React.createElement("button", { onClick: () => setForm({ id: "plan_" + Date.now(), title: "", cat: PLAN_CATS[0], assigneeId: isDirector ? "" : me.id, desc: "", due: "", status: "todo", by: me.name, createdAt: new Date().toISOString() }), style: { ...chipBtn, color: "#fff", background: C.teal, border: "none", marginBottom: 14 } },
+            React.createElement(Plus, { size: 14 }),
+            " ",
+            isDirector ? "Giao việc mới" : "Tạo việc cho mình"),
+        visible.length === 0 ? (React.createElement("div", { style: { textAlign: "center", padding: "36px 20px", background: C.surface, borderRadius: 14, border: `1px dashed ${C.line}` } },
+            React.createElement(Target, { size: 28, color: C.inkSoft, style: { marginBottom: 10 } }),
+            React.createElement("p", { style: { color: C.inkSoft, fontSize: 14, lineHeight: 1.5 } }, isDirector ? "Chưa có kế hoạch nào. Bấm Giao việc mới để bắt đầu." : "Chưa có việc nào được giao cho bạn."))) : (React.createElement("div", { style: { display: "grid", gap: 10 } }, visible.map((p) => {
+            const ss = planStatusStyle(p.status);
+            const who = (staff || []).find((s) => s.id === p.assigneeId);
+            const canStatus = isDirector || p.assigneeId === me.id;
+            return (React.createElement("div", { key: p.id, style: { background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 14 } },
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 } },
+                    React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: C.gold, textTransform: "uppercase", letterSpacing: ".03em" } }, p.cat),
+                    React.createElement("span", { style: { fontSize: 11.5, fontWeight: 700, background: ss.bg, color: ss.fg, borderRadius: 99, padding: "3px 9px" } }, PLAN_STATUS_LABEL[p.status])),
+                React.createElement("p", { style: { fontWeight: 700, fontSize: 15, marginTop: 6 } }, p.title),
+                p.desc && React.createElement("p", { style: { fontSize: 13, color: C.inkSoft, marginTop: 4, lineHeight: 1.45, whiteSpace: "pre-wrap" } }, p.desc),
+                React.createElement("p", { style: { fontSize: 12, color: C.inkSoft, marginTop: 6 } },
+                    "Giao cho: ",
+                    who ? who.name : "—",
+                    p.due ? " · hạn " + fmtDM(p.due) : ""),
+                canStatus && (React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" } }, PLAN_STATUS.map((st) => {
+                    const on = p.status === st;
+                    const sty = planStatusStyle(st);
+                    return (React.createElement("button", { key: st, onClick: () => setStatus(p.id, st), style: { fontSize: 12, fontWeight: 700, padding: "6px 11px", borderRadius: 99, cursor: "pointer", border: "none", background: on ? sty.bg : C.bg, color: on ? sty.fg : C.inkSoft } }, PLAN_STATUS_LABEL[st]));
+                }))),
+                (isDirector || p.assigneeId === me.id) && (React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 10 } },
+                    React.createElement("button", { onClick: () => setForm(p), style: chipBtn },
+                        React.createElement(Pencil, { size: 13 }),
+                        " S\u1EEDa"),
+                    React.createElement("button", { onClick: () => del(p.id), style: { ...chipBtn, color: C.coral, borderColor: C.coral } },
+                        React.createElement(Trash2, { size: 13 }),
+                        " X\u00F3a")))));
+        })))));
+}
+function IncidentReport({ emp, onBack, onDone }) {
+    const [desc, setDesc] = useState("");
+    const [photos, setPhotos] = useState([]);
+    const [busy, setBusy] = useState(false);
+    const fileRef = useRef(null);
+    async function onFile(e) {
+        const files = Array.from(e.target.files || []);
+        if (!files.length)
+            return;
+        setBusy(true);
+        const add = [];
+        for (const f of files) {
+            try {
+                add.push(await downscale(f));
+            }
+            catch (_a) { }
+        }
+        setPhotos((p) => [...p, ...add]);
+        setBusy(false);
+        if (fileRef.current)
+            fileRef.current.value = "";
+    }
+    async function submit() {
+        const text = desc.trim();
+        if (!text)
+            return;
+        const pos = posById(emp.posId) || {};
+        const id = "report:incident_" + Date.now();
+        const payload = { id, incident: true, staffId: emp.id, name: emp.name, posId: emp.posId, posName: pos.name || "", role: pos.role || "", type: "suco", typeLabel: "Báo sự cố", venue: VENUE, submittedAt: new Date().toISOString(), eos: { suco: text }, photos, reviewed: false };
+        await safeSet(id, JSON.stringify(payload), true);
+        onDone();
+    }
+    return (React.createElement("div", { className: "fade", style: { padding: "20px 18px 30px" } },
+        React.createElement(TopBar, { title: "B\u00E1o s\u1EF1 c\u1ED1", subtitle: emp.name, onBack: onBack }),
+        React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", background: C.coralSoft, borderRadius: 12, padding: "12px 14px", marginBottom: 16 } },
+            React.createElement(ShieldAlert, { size: 18, color: C.coral, style: { flexShrink: 0, marginTop: 1 } }),
+            React.createElement("span", { style: { fontSize: 13, color: C.ink, lineHeight: 1.45 } }, "M\u00F4 t\u1EA3 s\u1EF1 c\u1ED1 \u0111\u1EC3 g\u1EEDi ngay cho qu\u1EA3n l\u00FD. S\u1EF1 c\u1ED1 s\u1EBD v\u00E0o H\u1ED9p x\u1EED l\u00FD.")),
+        React.createElement(Label, null, "M\u00F4 t\u1EA3 s\u1EF1 c\u1ED1"),
+        React.createElement("textarea", { value: desc, onChange: (e) => setDesc(e.target.value), placeholder: "V\u00ED d\u1EE5: kh\u00E1ch ph\u00E0n n\u00E0n m\u00F3n m\u1EB7n, v\u1EE1 3 ly, m\u00E1y POS treo...", rows: 4, style: { ...inputStyle, minHeight: 96, resize: "vertical", marginBottom: 14 } }),
+        React.createElement(Label, null, "\u1EA2nh k\u00E8m theo (kh\u00F4ng b\u1EAFt bu\u1ED9c)"),
+        React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, margin: "8px 0 16px" } },
+            photos.map((src, i) => (React.createElement("div", { key: i, style: { position: "relative" } },
+                React.createElement("img", { src: src, alt: "Ảnh " + (i + 1), style: { width: 64, height: 64, objectFit: "cover", borderRadius: 10, border: `1px solid ${C.line}`, display: "block" } }),
+                React.createElement("button", { onClick: () => setPhotos(photos.filter((_, idx) => idx !== i)), style: { position: "absolute", top: -7, right: -7, width: 22, height: 22, borderRadius: "50%", background: C.coral, border: "2px solid #fff", display: "grid", placeItems: "center", cursor: "pointer", padding: 0 } },
+                    React.createElement(X, { size: 12, color: "#fff" }))))),
+            React.createElement("button", { onClick: () => fileRef.current.click(), disabled: busy, style: { display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 600, color: C.teal, background: C.tealSoft, border: "none", borderRadius: 9, padding: "8px 12px", cursor: "pointer" } },
+                React.createElement(Camera, { size: 15 }),
+                " ",
+                busy ? "Đang xử lý" : "Thêm ảnh"),
+            React.createElement("input", { ref: fileRef, type: "file", accept: "image/*", multiple: true, onChange: onFile, style: { display: "none" } })),
+        React.createElement(PrimaryButton, { disabled: !desc.trim(), onClick: submit },
+            React.createElement(Send, { size: 17 }),
+            " G\u1EEDi s\u1EF1 c\u1ED1 cho qu\u1EA3n l\u00FD")));
+}
+function IncidentDetail({ report, onBack, onDelete }) {
+    const [del, setDel] = useState(false);
+    const d = new Date(report.submittedAt);
+    const imgs = report.photos || [];
+    return (React.createElement("div", { className: "fade", style: { padding: "20px 18px" } },
+        React.createElement(TopBar, { title: "S\u1EF1 c\u1ED1", subtitle: (report.name || "") + " · " + d.toLocaleDateString("vi-VN") + " " + d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }), onBack: onBack }),
+        React.createElement("div", { style: { background: C.coralSoft, border: "1px solid #F3B6BE", borderRadius: 14, padding: 14, marginBottom: 18 } },
+            React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 700, color: C.coral, textTransform: "uppercase", letterSpacing: ".04em" } },
+                React.createElement(ShieldAlert, { size: 14 }),
+                " N\u1ED9i dung s\u1EF1 c\u1ED1"),
+            React.createElement("p", { style: { fontSize: 15, color: C.ink, marginTop: 6, lineHeight: 1.5, whiteSpace: "pre-wrap" } }, (report.eos && report.eos.suco) || ""),
+            React.createElement("p", { style: { fontSize: 12.5, color: C.inkSoft, marginTop: 8 } },
+                report.posName,
+                report.name ? " · " + report.name : "")),
+        imgs.length > 0 && (React.createElement(React.Fragment, null,
+            React.createElement(Label, null,
+                "H\u00ECnh \u1EA3nh (",
+                imgs.length,
+                ")"),
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, imgs.map((src, i) => React.createElement("img", { key: i, src: src, alt: "Ảnh " + (i + 1), style: { width: "100%", height: 130, objectFit: "cover", borderRadius: 12, border: `1px solid ${C.line}` } }))))),
+        onDelete && (del ? (React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 16 } },
+            React.createElement("button", { onClick: () => onDelete(report), style: { flex: 1, background: C.coral, color: "#fff", border: "none", borderRadius: 12, padding: "12px", fontWeight: 700, cursor: "pointer" } }, "X\u00E1c nh\u1EADn x\u00F3a"),
+            React.createElement("button", { onClick: () => setDel(false), style: { ...chipBtn, padding: "12px 14px" } }, "H\u1EE7y"))) : (React.createElement("button", { onClick: () => setDel(true), style: { ...ghostBtn, color: C.coral } },
+            React.createElement(Trash2, { size: 14, style: { verticalAlign: "-2px" } }),
+            " X\u00F3a s\u1EF1 c\u1ED1 n\u00E0y")))));
+}
 function canEdit86(emp, kind) {
     const lv = levelForPos(emp && emp.posId);
     if (lv === "giamdoc" || lv === "quanly")
@@ -2013,11 +2411,13 @@ function StaffMenu({ posId, onBack }) {
 /* Staff sees own performance */
 function StaffSelfPerf({ emp, onBack }) {
     const [reports, setReports] = useState(null);
+    const [roster, setRoster] = useState({});
+    const [rate, setRate] = useState(POINT_RATE_DEFAULT);
     const [period, setPeriod] = useState({ id: "month" });
     useEffect(() => {
         (async () => {
             try {
-                const res = await window.storage.list("report:", true);
+                const res = await safeList("report:", true);
                 const keys = (res && res.keys) || [];
                 const items = [];
                 for (const k of keys) {
@@ -2034,6 +2434,17 @@ function StaffSelfPerf({ emp, onBack }) {
             catch (_b) {
                 setReports([]);
             }
+            const rraw = await safeGet("roster:week", true);
+            if (rraw) {
+                try {
+                    setRoster(JSON.parse(rraw));
+                }
+                catch (_c) { }
+            }
+            const prw = await safeGet("settings:point_rate", true);
+            const n = Number(prw);
+            if (n)
+                setRate(n);
         })();
     }, []);
     if (reports === null)
@@ -2055,6 +2466,30 @@ function StaffSelfPerf({ emp, onBack }) {
             React.createElement(Stat, { Icon: ClipboardList, label: "B\u00E1o c\u00E1o", value: st.count }),
             React.createElement(Stat, { Icon: Award, label: "Ho\u00E0n th\u00E0nh", value: st.avgPct + "%" }),
             React.createElement(Stat, { Icon: Star, label: "\u0110i\u1EC3m TB", value: st.stars ? st.stars.toFixed(1) : "0" })),
+        (() => {
+            const mp = staffMonthPoints(emp, reports, roster, todayIso());
+            const money = mp.pts * rate;
+            const pos = mp.pts > 0;
+            const neg = mp.pts < 0;
+            return (React.createElement("div", { style: { background: C.ink, borderRadius: 14, padding: 16, marginBottom: 18, color: "#fff" } },
+                React.createElement("span", { style: { fontSize: 12, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "#9AB8E8" } }, "\u0110i\u1EC3m th\u01B0\u1EDFng th\u00E1ng n\u00E0y"),
+                React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 10, marginTop: 8 } },
+                    React.createElement("span", { style: { fontSize: 30, fontWeight: 800, color: pos ? "#6FD3A8" : neg ? "#FF9AA6" : "#fff" } },
+                        mp.pts > 0 ? "+" : "",
+                        mp.pts,
+                        " \u0111i\u1EC3m"),
+                    React.createElement("span", { style: { fontSize: 15, fontWeight: 700, color: "#9AB8E8" } },
+                        money >= 0 ? "+" : "",
+                        fmt(money),
+                        "\u0111")),
+                React.createElement("p", { style: { fontSize: 12, color: "#9AB8E8", marginTop: 6, lineHeight: 1.45 } },
+                    mp.good,
+                    " l\u1EA7n \u0111\u1EA1t \u0111i\u1EC3m \u00B7 ",
+                    mp.bad,
+                    " l\u1EA7n d\u01B0\u1EDBi chu\u1EA9n \u00B7 ",
+                    mp.miss,
+                    " ng\u00E0y kh\u00F4ng b\u00E1o c\u00E1o. \u0110\u1EA1t 5\u2605 cu\u1ED1i ca \u0111\u1EC3 c\u1ED9ng \u0111i\u1EC3m, b\u1ECF b\u00E1o c\u00E1o b\u1ECB tr\u1EEB.")));
+        })(),
         byPhase.length > 0 && (React.createElement(React.Fragment, null,
             React.createElement(Label, null, "Ho\u00E0n th\u00E0nh theo m\u1ED1c"),
             React.createElement("div", { style: { background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: "6px 14px", marginBottom: 18 } }, byPhase.map((x, i) => (React.createElement("div", { key: x.ph, style: { padding: "11px 0", borderBottom: i < byPhase.length - 1 ? `1px solid ${C.line}` : "none" } },
@@ -2089,7 +2524,10 @@ function StaffSelfPerf({ emp, onBack }) {
                     sc ? React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 4, color: C.gold, marginLeft: "auto" } },
                         React.createElement(Star, { size: 14, fill: C.gold }),
                         " ",
-                        sc.toFixed(1)) : React.createElement("span", { style: { color: C.inkSoft, marginLeft: "auto", fontSize: 12 } }, "ch\u01B0a ch\u1EA5m"))));
+                        sc.toFixed(1)) : React.createElement("span", { style: { color: C.inkSoft, marginLeft: "auto", fontSize: 12 } }, "ch\u01B0a ch\u1EA5m")),
+                r.feedback && r.feedback.trim() && (React.createElement("div", { style: { background: C.tealSoft, borderRadius: 10, padding: "9px 11px", marginTop: 10 } },
+                    React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: C.teal, textTransform: "uppercase", letterSpacing: ".03em" } }, "G\u00F3p \u00FD t\u1EEB qu\u1EA3n l\u00FD"),
+                    React.createElement("p", { style: { fontSize: 13.5, color: C.ink, marginTop: 3, lineHeight: 1.45, whiteSpace: "pre-wrap" } }, r.feedback)))));
         })))));
 }
 /* ================= Compliance by department and reward ================= */
